@@ -36,7 +36,24 @@ class DatabaseService {
       )
     `);
 
-    console.log('Tabellen "tokens" und "documents" erfolgreich erstellt oder existieren bereits');
+    // Shipments-Tabelle
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS shipments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_nr TEXT,
+        delivery_note_nr TEXT,
+        tracking_number TEXT,
+        service TEXT,
+        label_zpl_base64 TEXT,
+        shipment_charges TEXT,
+        date_created TEXT,
+        document_record_id INTEGER,
+        transaction_identifier TEXT,
+        error_message TEXT
+      )
+    `);
+
+    console.info('Tabellen "tokens", "documents" und "shipments" erfolgreich erstellt oder existieren bereits');
   }
 
   async getDb() {
@@ -44,6 +61,36 @@ class DatabaseService {
       await this.initializeDatabase();
     }
     return this.db;
+  }
+
+  // Methode zum Speichern von Shipments
+  async saveShipment(data) {
+    const {
+      orderNr, deliveryNoteNr, trackingNumber, service, labelZPLBase64,
+      shipmentCharges, documentRecordId, transactionIdentifier, errorMessage
+    } = data;
+
+    const dateCreated = new Date().toISOString();
+
+    const query = `
+      INSERT INTO shipments (
+        order_nr, delivery_note_nr, tracking_number, service, label_zpl_base64,
+        shipment_charges, date_created, document_record_id, transaction_identifier, error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const params = [
+      orderNr, deliveryNoteNr, trackingNumber, service, labelZPLBase64,
+      shipmentCharges, dateCreated, documentRecordId, transactionIdentifier, errorMessage
+    ];
+
+    try {
+      const db = await this.getDb();
+      await db.run(query, params);
+    } catch (error) {
+      console.error('Error saving shipment:', error);
+      throw error;
+    }
   }
 }
 

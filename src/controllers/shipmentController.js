@@ -2,6 +2,7 @@
 
 import fetch from 'node-fetch';
 import OAuthService from '../services/OAuthService.js';
+import DatabaseService from '../services/DatabaseService.js';
 import { v4 as uuidv4 } from 'uuid';
 
 class ShipmentController {
@@ -22,7 +23,7 @@ class ShipmentController {
     }
 
     const transId = uuidv4();
-    const url = `https://onlinetools.ups.com/api/shipments/v1/ship?additionaladdressvalidation=string`;
+    const url = `https://wwwcie.ups.com/api/shipments/v1/ship?additionaladdressvalidation=string`;
 
     const stateProvinceCode = Receiver.Country === 'US' ? 'GA' : undefined;
 
@@ -128,41 +129,73 @@ class ShipmentController {
       }
     };
 
-    console.log('UPS API Request Body:\n', JSON.stringify(requestBody, null, 2), '\n\n');
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'transId': transId,
+          'transactionSrc': 'testing',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(requestBody)
+      });
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'transId': transId,
-        'transactionSrc': 'testing',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify(requestBody)
-    });
+      const data = await response.json();
 
-    const data = await response.json();
+      if (!response.ok || data.ShipmentResponse?.Response?.ResponseStatus?.Code !== '1') {
+        const errorMessage = data.ShipmentResponse?.Response?.Alert?.map(alert => alert.Description).join('; ') || 'Unbekannter Fehler';
 
-    console.log(`UPS API Response Status Code: ${data.ShipmentResponse?.Response?.ResponseStatus?.Code || 'Keine Angabe'}`);
-    console.log('\n\nUPS API Full Response:\n', JSON.stringify(data, null, 2));
+        // Speichere Fehler in der Datenbank
+        await DatabaseService.saveShipment({
+          orderNr: OrderNr,
+          deliveryNoteNr: DeliveryNoteNr,
+          trackingNumber: null,
+          service: ServiceCode,
+          labelZPLBase64: null,
+          shipmentCharges: null,
+          documentRecordId: documentId,
+          transactionIdentifier: transId,
+          errorMessage
+        });
 
-    if (!response.ok || data.ShipmentResponse?.Response?.ResponseStatus?.Code !== '1') {
-      const errorDetails = data.ShipmentResponse?.Response?.Alert?.map(alert => alert.Description).join('; ') || 'Unbekannter Fehler';
-      throw new Error(`Fehler bei der Shipment-Anfrage: ${errorDetails}`);
+        throw new Error(`Fehler bei der Shipment-Anfrage: ${errorMessage}`);
+      }
+
+      const shipmentResults = data.ShipmentResponse?.ShipmentResults;
+      const trackingNumber = shipmentResults?.ShipmentIdentificationNumber;
+      const packageResults = shipmentResults?.PackageResults;
+      const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
+      const shipmentCharges = JSON.stringify(shipmentResults?.ShipmentCharges);
+
+      if (!zplBase64 || !trackingNumber) {
+        throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
+      }
+
+      // Speichere erfolgreiches Shipment in der Datenbank
+      await DatabaseService.saveShipment({
+        orderNr: OrderNr,
+        deliveryNoteNr: DeliveryNoteNr,
+        trackingNumber,
+        service: ServiceCode,
+        labelZPLBase64: zplBase64,
+        shipmentCharges,
+        documentRecordId: documentId,
+        transactionIdentifier: transId,
+        errorMessage: null
+      });
+
+      return {
+        ZPLBase64: zplBase64,
+        TrackingNumber: trackingNumber,
+        DeliveryNoteNr,
+        Service: shipmentData.Country === 'DE' || shipmentData.Country === 'NL' || shipmentData.Country === 'BE' ? 'UPS Standard' : 'UPS Saver'
+      };
+
+    } catch (error) {
+      console.error('Fehler beim Erstellen des Shipments:', error.message);
+      throw error;
     }
-    
-    const shipmentResults = data.ShipmentResponse?.ShipmentResults;
-    const trackingNumber = shipmentResults?.ShipmentIdentificationNumber;
-    const packageResults = shipmentResults?.PackageResults;
-
-    const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
-
-    return {
-      ZPLBase64: zplBase64,
-      TrackingNumber: trackingNumber,
-      DeliveryNoteNr,
-      Service: shipmentData.Country === 'DE' || shipmentData.Country === 'NL' || shipmentData.Country === 'BE' ? 'UPS Standard' : 'UPS Saver'
-    };
   }
 }
 
