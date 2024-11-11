@@ -49,11 +49,23 @@ class DatabaseService {
         date_created TEXT,
         document_record_id INTEGER,
         transaction_identifier TEXT,
-        error_message TEXT
+        error_message TEXT,
+        status_code INTEGER DEFAULT NULL
       )
     `);
 
-    console.info('Tabellen "tokens", "documents" und "shipments" erfolgreich erstellt oder existieren bereits');
+    // Shipment Logs-Tabelle
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS shipment_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_nr TEXT,
+        status_code INTEGER,
+        message TEXT,
+        timestamp TEXT
+      )
+    `);
+
+    console.info('Tabellen "tokens", "documents", "shipments" und "shipment_logs" erfolgreich erstellt oder existieren bereits');
   }
 
   async getDb() {
@@ -67,7 +79,7 @@ class DatabaseService {
   async saveShipment(data) {
     const {
       orderNr, deliveryNoteNr, trackingNumber, service, labelZPLBase64,
-      shipmentCharges, documentRecordId, transactionIdentifier, errorMessage
+      shipmentCharges, documentRecordId, transactionIdentifier, errorMessage, statusCode
     } = data;
 
     const dateCreated = new Date().toISOString();
@@ -75,13 +87,13 @@ class DatabaseService {
     const query = `
       INSERT INTO shipments (
         order_nr, delivery_note_nr, tracking_number, service, label_zpl_base64,
-        shipment_charges, date_created, document_record_id, transaction_identifier, error_message
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        shipment_charges, date_created, document_record_id, transaction_identifier, error_message, status_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
       orderNr, deliveryNoteNr, trackingNumber, service, labelZPLBase64,
-      shipmentCharges, dateCreated, documentRecordId, transactionIdentifier, errorMessage
+      shipmentCharges, dateCreated, documentRecordId, transactionIdentifier, errorMessage, statusCode
     ];
 
     try {
@@ -89,6 +101,33 @@ class DatabaseService {
       await db.run(query, params);
     } catch (error) {
       console.error('Error saving shipment:', error);
+      throw error;
+    }
+  }
+
+  // Methode zum Speichern von Shipment Logs
+  async saveShipmentLog(data) {
+    const {
+      orderNr, statusCode, message
+    } = data;
+
+    const timestamp = new Date().toISOString();
+
+    const query = `
+      INSERT INTO shipment_logs (
+        order_nr, status_code, message, timestamp
+      ) VALUES (?, ?, ?, ?)
+    `;
+
+    const params = [
+      orderNr, statusCode, message, timestamp
+    ];
+
+    try {
+      const db = await this.getDb();
+      await db.run(query, params);
+    } catch (error) {
+      console.error('Error saving shipment log:', error);
       throw error;
     }
   }

@@ -19,7 +19,13 @@ class ShipmentController {
 
     const accessToken = await OAuthService.getAccessToken();
     if (!accessToken) {
-      throw new Error('Kein gültiger Access Token verfügbar.');
+      const errorMessage = 'Kein gültiger Access Token verfügbar.';
+      await DatabaseService.saveShipmentLog({
+        orderNr: OrderNr,
+        statusCode: 500,
+        message: errorMessage
+      });
+      throw new Error(errorMessage);
     }
 
     const transId = uuidv4();
@@ -142,11 +148,18 @@ class ShipmentController {
       });
 
       const data = await response.json();
+      const statusCode = response.status;
 
       if (!response.ok || data.ShipmentResponse?.Response?.ResponseStatus?.Code !== '1') {
         const errorMessage = data.ShipmentResponse?.Response?.Alert?.map(alert => alert.Description).join('; ') || 'Unbekannter Fehler';
 
-        // Speichere Fehler in der Datenbank
+        // Speichere Fehler in den shipment_logs und shipments Tabellen
+        await DatabaseService.saveShipmentLog({
+          orderNr: OrderNr,
+          statusCode,
+          message: errorMessage
+        });
+
         await DatabaseService.saveShipment({
           orderNr: OrderNr,
           deliveryNoteNr: DeliveryNoteNr,
@@ -156,7 +169,8 @@ class ShipmentController {
           shipmentCharges: null,
           documentRecordId: documentId,
           transactionIdentifier: transId,
-          errorMessage
+          errorMessage,
+          statusCode
         });
 
         throw new Error(`Fehler bei der Shipment-Anfrage: ${errorMessage}`);
@@ -182,7 +196,15 @@ class ShipmentController {
         shipmentCharges,
         documentRecordId: documentId,
         transactionIdentifier: transId,
-        errorMessage: null
+        errorMessage: null,
+        statusCode: 200
+      });
+
+      // Speichere Erfolgsmeldung in den Logs
+      await DatabaseService.saveShipmentLog({
+        orderNr: OrderNr,
+        statusCode: 200,
+        message: 'Shipment erfolgreich erstellt.'
       });
 
       return {
@@ -194,6 +216,13 @@ class ShipmentController {
 
     } catch (error) {
       console.error('Fehler beim Erstellen des Shipments:', error.message);
+
+      await DatabaseService.saveShipmentLog({
+        orderNr: OrderNr,
+        statusCode: 500,
+        message: error.message
+      });
+
       throw error;
     }
   }
