@@ -51,7 +51,7 @@ class ShipmentController {
   }
 
   getServiceCode(country) {
-    return country === 'DE' || country === 'NL' || country === 'BE' ? '11' : '65';
+    return country === 'DE' || country === 'NL' || country === "ES" || country === 'BE' ? '11' : '65';
   }
 
   getStateCode(receiver) {
