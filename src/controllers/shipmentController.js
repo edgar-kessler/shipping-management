@@ -8,16 +8,13 @@ import { getStateCodeByStateName } from 'us-state-codes';
 class ShipmentController {
   async createShipment(shipmentData) {
     const { OrderNr, DeliveryNoteNr, Receiver, Sender, documentRecordId } = shipmentData;
-
-    // Debugging logs to check if documentRecordId is undefined
     console.log("Received documentRecordId:", documentRecordId);
     if (!documentRecordId) {
       throw new Error("documentRecordId is missing from shipmentData.");
     }
 
-    // Fetch documentData using documentRecordId
     const documentData = await UploadDocumentService.getDocumentById(documentRecordId);
-    console.log("Fetched documentData:", documentData); // Log fetched documentData
+    console.log("Fetched documentData:", documentData);
 
     if (!documentData) {
       throw new Error(`Document with ID ${documentRecordId} could not be found.`);
@@ -27,7 +24,7 @@ class ShipmentController {
     }
 
     const documentId = documentData.document_id;
-    console.log("Fetched documentId:", documentId); // Log fetched documentId
+    console.log("Fetched documentId:", documentId);
     console.log(shipmentData.State);
 
     const accessToken = await this.getAccessToken();
@@ -64,7 +61,6 @@ class ShipmentController {
 
   buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId) {
     const { OrderNr, Receiver, Sender } = shipmentData;
-    
     return {
       ShipmentRequest: {
         Request: {
@@ -100,12 +96,12 @@ class ShipmentController {
             },
           },
           ShipmentRatingOptions: {
-            NegotiatedRatesIndicator: "Y" // Indicator to request negotiated rates if eligible
+            NegotiatedRatesIndicator: "Y"
           },
           
           ReferenceNumber: [
             {
-              Value: OrderNr.slice(0, 14) // Limit to 14 characters for compatibility
+              Value: OrderNr.slice(0, 14)
             }
           ]
         },
@@ -155,6 +151,9 @@ class ShipmentController {
     });
     const data = await response.json();
     this.debugLog("Shipment Response", { status: response.status, data });
+    if (!response.ok) {
+      throw new Error(JSON.stringify(data));
+    }
     return { data, statusCode: response.status };
   }
 
@@ -162,7 +161,7 @@ class ShipmentController {
     const { data, statusCode } = response;
 
     if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
-      throw new Error(`Fehler bei der Shipment-Anfrage: ${data.response?.errors?.map(error => error.message).join('; ') || 'Unbekannter Fehler'}`);
+      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
     }
 
     const shipmentResults = data.ShipmentResponse?.ShipmentResults;
@@ -176,7 +175,6 @@ class ShipmentController {
       throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
     }
 
-    // Speichern in der Datenbank
     await DatabaseService.saveShipment({
       ID: uuidv4(),
       Referenz: shipmentData.OrderNr,
