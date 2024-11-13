@@ -1,10 +1,9 @@
 // src/services/DatabaseService.js
 import mysql from 'mysql2/promise';
-import { DateTime } from 'luxon'; // Import Luxon
+import { DateTime } from 'luxon';
 
 class DatabaseService {
   constructor() {
-    // Initialize MySQL connection pool
     this.connection = mysql.createPool({
       host: '65.21.242.103',
       user: 'db_admin',
@@ -22,7 +21,8 @@ class DatabaseService {
 
   async initializeDatabase() {
     const db = await this.getDb();
-  
+
+    // Define tables without `shipment_logs`, keeping only `logs_shipments`
     await db.query(`
       CREATE TABLE IF NOT EXISTS tokens (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -31,7 +31,7 @@ class DatabaseService {
         expires_at BIGINT
       )
     `);
-  
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -42,7 +42,7 @@ class DatabaseService {
         timestamp TEXT
       )
     `);
-  
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS shipments (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -60,18 +60,8 @@ class DatabaseService {
         date_created TEXT
       )
     `);
-  
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS shipment_logs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        order_nr TEXT,
-        status_code INT,
-        message TEXT,
-        timestamp TEXT
-      )
-    `);
-  
-    // New table for logging shipment requests and responses
+
+    // Main logging table
     await db.query(`
       CREATE TABLE IF NOT EXISTS logs_shipments (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -82,16 +72,13 @@ class DatabaseService {
         timestamp DATETIME NOT NULL
       )
     `);
-  
-    console.info('Tables "tokens", "documents", "shipments", "shipment_logs", and "logs_shipments" successfully created or already exist in MySQL');
-  }
-  
 
-  // Use Luxon to get the current time in Berlin timezone in "HH:mm:ss dd-MM-yyyy" format
+    console.info('Tables "tokens", "documents", "shipments", and "logs_shipments" successfully created or already exist in MySQL');
+  }
+
+  // Utility to get current Berlin time
   getCurrentBerlinTime() {
-    return DateTime.now()
-      .setZone('Europe/Berlin')
-      .toFormat('HH:mm:ss dd-MM-yyyy');
+    return DateTime.now().setZone('Europe/Berlin').toFormat('yyyy-MM-dd HH:mm:ss');
   }
 
   async saveShipment(data) {
@@ -127,37 +114,8 @@ class DatabaseService {
     }
   }
 
+  // Unified logging function for `logs_shipments`
   async saveShipmentLog(endpoint, requestData, responseData, statusCode) {
-    const timestamp = this.getCurrentBerlinTime();
-    const query = `
-      INSERT INTO logs_shipments (endpoint, request_data, response_data, status_code, timestamp)
-      VALUES (?, ?, ?, ?, ?)
-    `;
-    const params = [
-      endpoint,
-      JSON.stringify(requestData),
-      JSON.stringify(responseData),
-      statusCode,
-      timestamp
-    ];
-  
-    try {
-      const db = await this.getDb();
-      await db.query(query, params);
-    } catch (error) {
-      console.error('Error saving shipment log:', error);
-      throw error;
-    }
-  }
-  
-  async getLatestToken() {
-    const db = await this.getDb();
-    const [rows] = await db.query(
-      `SELECT access_token, refresh_token, expires_at FROM tokens ORDER BY id DESC LIMIT 1`
-    );
-    return rows[0] || null;
-  }
-  async saveLog(endpoint, requestData, responseData, statusCode) {
     const timestamp = this.getCurrentBerlinTime();
     const query = `
       INSERT INTO logs_shipments (endpoint, request_data, response_data, status_code, timestamp)
@@ -175,9 +133,17 @@ class DatabaseService {
       const db = await this.getDb();
       await db.query(query, params);
     } catch (error) {
-      console.error('Error saving log:', error);
+      console.error('Error saving shipment log:', error);
       throw error;
     }
+  }
+
+  async getLatestToken() {
+    const db = await this.getDb();
+    const [rows] = await db.query(
+      `SELECT access_token, refresh_token, expires_at FROM tokens ORDER BY id DESC LIMIT 1`
+    );
+    return rows[0] || null;
   }
 }
 
