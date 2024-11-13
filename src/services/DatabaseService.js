@@ -127,7 +127,7 @@ class DatabaseService {
   async saveShipmentLog(endpoint, requestData, responseData, statusCode) {
     const timestamp = this.getCurrentBerlinTime();
     const query = `
-      INSERT INTO logs_shipments (endpoint, request_data, response_data, status_code, timestamp)
+      INSERT INTO shipment_logs (endpoint, request_data, response_data, status_code, timestamp)
       VALUES (?, ?, ?, ?, ?)
     `;
     const params = [
