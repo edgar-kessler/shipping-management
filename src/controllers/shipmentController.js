@@ -150,9 +150,10 @@ class ShipmentController {
       body: JSON.stringify(requestBody)
     });
     const data = await response.json();
-    this.debugLog("Shipment Response", { status: response.status, data });
+    this.debugLog("Shipment Response - ", { status: response.status, data });
     if (!response.ok) {
-      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
+      // Directly return the full response data in case of an error
+      return { status: response.status, data };
     }
     return { data, statusCode: response.status };
   }
@@ -161,8 +162,8 @@ class ShipmentController {
     const { data, statusCode } = response;
 
     if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
-      // Throw an error with the full UPS response for debugging
-      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
+      // Return the UPS response directly for debugging
+      return { error: "Fehler beim Erstellen des Shipments", UPSResponse: response };
     }
 
     const shipmentResults = data.ShipmentResponse?.ShipmentResults;
