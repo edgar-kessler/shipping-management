@@ -22,7 +22,7 @@ class DatabaseService {
 
   async initializeDatabase() {
     const db = await this.getDb();
-
+  
     await db.query(`
       CREATE TABLE IF NOT EXISTS tokens (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -31,7 +31,7 @@ class DatabaseService {
         expires_at BIGINT
       )
     `);
-
+  
     await db.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -42,17 +42,7 @@ class DatabaseService {
         timestamp TEXT
       )
     `);
-
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS shipment_logs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        order_nr TEXT,
-        status_code INT,
-        message TEXT,
-        timestamp TEXT
-      )
-    `);
-
+  
     await db.query(`
       CREATE TABLE IF NOT EXISTS shipments (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -70,7 +60,7 @@ class DatabaseService {
         date_created TEXT
       )
     `);
-
+  
     await db.query(`
       CREATE TABLE IF NOT EXISTS shipment_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -80,9 +70,22 @@ class DatabaseService {
         timestamp TEXT
       )
     `);
-
-    console.info('Tables "tokens", "documents", "shipments", and "shipment_logs" successfully created or already exist in MySQL');
+  
+    // New table for logging shipment requests and responses
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS logs_shipments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        endpoint VARCHAR(255) NOT NULL,
+        request_data JSON NOT NULL,
+        response_data JSON NOT NULL,
+        status_code INT NOT NULL,
+        timestamp DATETIME NOT NULL
+      )
+    `);
+  
+    console.info('Tables "tokens", "documents", "shipments", "shipment_logs", and "logs_shipments" successfully created or already exist in MySQL');
   }
+  
 
   // Use Luxon to get the current time in Berlin timezone in "HH:mm:ss dd-MM-yyyy" format
   getCurrentBerlinTime() {
@@ -127,7 +130,7 @@ class DatabaseService {
   async saveShipmentLog(endpoint, requestData, responseData, statusCode) {
     const timestamp = this.getCurrentBerlinTime();
     const query = `
-      INSERT INTO shipment_logs (endpoint, request_data, response_data, status_code, timestamp)
+      INSERT INTO logs_shipments (endpoint, request_data, response_data, status_code, timestamp)
       VALUES (?, ?, ?, ?, ?)
     `;
     const params = [
@@ -146,7 +149,7 @@ class DatabaseService {
       throw error;
     }
   }
-
+  
   async getLatestToken() {
     const db = await this.getDb();
     const [rows] = await db.query(
