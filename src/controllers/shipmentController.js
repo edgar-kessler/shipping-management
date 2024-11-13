@@ -80,6 +80,11 @@ class ShipmentController {
     return country === 'DE' || country === 'NL' || country === "ES" || country === 'BE' ? '11' : '65';
   }
 
+  getServiceDescription(country) {
+    // Returns a description based on country code
+    return country === 'DE' || country === 'NL' || country === 'BE' ? 'UPS Standard' : 'UPS Saver';
+  }
+
   getStateCode(receiver) {
     if (receiver.Country === 'US' && receiver.State) {
       return receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State;
