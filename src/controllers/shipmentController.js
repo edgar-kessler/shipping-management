@@ -9,12 +9,33 @@ class ShipmentController {
   async createShipment(shipmentData) {
     const { OrderNr, DeliveryNoteNr, Receiver, Sender, documentRecordId } = shipmentData;
     if (!documentRecordId) {
+      await DatabaseService.saveShipmentLog(
+        "Create Shipment - Missing documentRecordId",
+        shipmentData,
+        { error: "documentRecordId is missing from shipmentData." },
+        400
+      );
       throw new Error("documentRecordId is missing from shipmentData.");
     }
 
+    // Log initiation of the shipment request
+    await DatabaseService.saveShipmentLog(
+      "Create Shipment - Initiated",
+      shipmentData,
+      { message: "Shipment creation process started." },
+      100
+    );
+
     const documentData = await UploadDocumentService.getDocumentById(documentRecordId);
     if (!documentData || !documentData.document_id) {
-      throw new Error(`Document with ID ${documentRecordId} has no valid document_id.`);
+      const errorMessage = `Document with ID ${documentRecordId} has no valid document_id.`;
+      await DatabaseService.saveShipmentLog(
+        "Create Shipment - Invalid Document",
+        shipmentData,
+        { error: errorMessage },
+        404
+      );
+      throw new Error(errorMessage);
     }
 
     const accessToken = await this.getAccessToken();
@@ -23,13 +44,18 @@ class ShipmentController {
     const stateProvinceCode = this.getStateCode(Receiver);
     const requestBody = this.buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentData.document_id);
 
-    // Log the request
-    this.debugLog("Shipment Request", { url: this.getShipmentUrl(), headers: this.getHeaders(transId, accessToken), body: requestBody });
+    // Log the request payload
+    await DatabaseService.saveShipmentLog(
+      "Shipment Request Payload",
+      requestBody,
+      { message: "Request payload prepared for UPS API." },
+      100
+    );
 
     const response = await this.sendShipmentRequest(requestBody, transId, accessToken);
 
-    // Save the response log
-    await DatabaseService.saveLog(
+    // Save the response log from UPS
+    await DatabaseService.saveShipmentLog(
       "Shipment Response",
       requestBody,
       { status: response.statusCode, data: response.data },
@@ -42,6 +68,12 @@ class ShipmentController {
   async getAccessToken() {
     const accessToken = await OAuthService.getAccessToken();
     if (!accessToken) {
+      await DatabaseService.saveShipmentLog(
+        "Get Access Token - Failed",
+        {},
+        { error: "Kein gültiger Access Token verfügbar." },
+        401
+      );
       throw new Error('Kein gültiger Access Token verfügbar.');
     }
     return accessToken;
@@ -97,7 +129,6 @@ class ShipmentController {
           ShipmentRatingOptions: {
             NegotiatedRatesIndicator: "Y"
           },
-          
           ReferenceNumber: [
             {
               Value: OrderNr.slice(0, 14)
@@ -116,7 +147,15 @@ class ShipmentController {
       body: JSON.stringify(requestBody)
     });
     const data = await response.json();
-    this.debugLog("Shipment Response", { status: response.status, data });
+
+    // Log the UPS API response status and data
+    await DatabaseService.saveShipmentLog(
+      "UPS API Response",
+      requestBody,
+      { status: response.status, data },
+      response.status
+    );
+
     if (!response.ok) {
       return { statusCode: response.status, data };
     }
@@ -127,7 +166,14 @@ class ShipmentController {
     const { data, statusCode } = response;
 
     if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
-      return { error: "Fehler beim Erstellen des Shipments", UPSResponse: response };
+      const errorResponse = { error: "Fehler beim Erstellen des Shipments", UPSResponse: response };
+      await DatabaseService.saveShipmentLog(
+        "Shipment Creation Failed",
+        shipmentData,
+        errorResponse,
+        statusCode
+      );
+      return errorResponse;
     }
 
     const shipmentResults = data.ShipmentResponse?.ShipmentResults;
@@ -138,9 +184,17 @@ class ShipmentController {
     const shipmentCharges = JSON.stringify(shipmentResults?.NegotiatedRateCharges);
 
     if (!zplBase64 || !trackingNumber) {
-      throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
+      const errorMessage = 'Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.';
+      await DatabaseService.saveShipmentLog(
+        "Shipment Creation - Missing Data",
+        shipmentData,
+        { error: errorMessage },
+        500
+      );
+      throw new Error(errorMessage);
     }
 
+    // Log successful shipment saving to the database
     await DatabaseService.saveShipment({
       ID: uuidv4(),
       Referenz: shipmentData.OrderNr,
@@ -156,11 +210,31 @@ class ShipmentController {
       Benutzer: 'Test-User'
     });
 
+    await DatabaseService.saveShipmentLog(
+      "Shipment Saved to Database",
+      shipmentData,
+      { trackingNumber, message: "Shipment successfully saved to the database." },
+      201
+    );
+
     return {
       ZPLBase64: zplBase64,
       TrackingNumber: trackingNumber,
       DeliveryNoteNr: shipmentData.DeliveryNoteNr,
       Service: this.getServiceDescription(shipmentData.Country)
+    };
+  }
+
+  getShipmentUrl() {
+    return "https://onlinetools.ups.com/api/shipments/v1/ship?additionaladdressvalidation=string";
+  }
+
+  getHeaders(transId, accessToken) {
+    return {
+      'Content-Type': 'application/json',
+      'transId': transId,
+      'transactionSrc': 'testing',
+      'Authorization': `Bearer ${accessToken}`
     };
   }
 
