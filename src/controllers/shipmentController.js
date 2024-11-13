@@ -152,7 +152,7 @@ class ShipmentController {
     const data = await response.json();
     this.debugLog("Shipment Response", { status: response.status, data });
     if (!response.ok) {
-      throw new Error(JSON.stringify(data));
+      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
     }
     return { data, statusCode: response.status };
   }
@@ -161,6 +161,7 @@ class ShipmentController {
     const { data, statusCode } = response;
 
     if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
+      // Throw an error with the full UPS response for debugging
       throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
     }
 
