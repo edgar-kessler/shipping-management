@@ -1,230 +1,208 @@
-// src/controllers/ShipmentController.js
-
 import fetch from 'node-fetch';
 import OAuthService from '../services/OAuthService.js';
 import DatabaseService from '../services/DatabaseService.js';
+import UploadDocumentService from '../services/UploadDocumentService.js';
 import { v4 as uuidv4 } from 'uuid';
+import { getStateCodeByStateName } from 'us-state-codes';
 
 class ShipmentController {
   async createShipment(shipmentData) {
-    const {
-      OrderNr,
-      DeliveryNoteNr,
-      ReferenceNumber,
-      Receiver,
-      Sender,
-      documentId,
-      ServiceCode = shipmentData.Country === 'DE' || shipmentData.Country === 'NL' || shipmentData.Country === 'BE' ? '11' : '65'
-    } = shipmentData;
+    const { OrderNr, DeliveryNoteNr, Receiver, Sender, documentRecordId } = shipmentData;
 
-    const accessToken = await OAuthService.getAccessToken();
-    if (!accessToken) {
-      const errorMessage = 'Kein gültiger Access Token verfügbar.';
-      await DatabaseService.saveShipmentLog({
-        orderNr: OrderNr,
-        statusCode: 500,
-        message: errorMessage
-      });
-      throw new Error(errorMessage);
+    // Debugging logs to check if documentRecordId is undefined
+    console.log("Received documentRecordId:", documentRecordId);
+    if (!documentRecordId) {
+      throw new Error("documentRecordId is missing from shipmentData.");
     }
 
+    // Fetch documentData using documentRecordId
+    const documentData = await UploadDocumentService.getDocumentById(documentRecordId);
+    console.log("Fetched documentData:", documentData); // Log fetched documentData
+
+    if (!documentData) {
+      throw new Error(`Document with ID ${documentRecordId} could not be found.`);
+    }
+    if (!documentData.document_id) {
+      throw new Error(`Document with ID ${documentRecordId} has no valid document_id.`);
+    }
+
+    const documentId = documentData.document_id;
+    console.log("Fetched documentId:", documentId); // Log fetched documentId
+    console.log(shipmentData.State);
+
+    const accessToken = await this.getAccessToken();
     const transId = uuidv4();
-    const url = `https://wwwcie.ups.com/api/shipments/v1/ship?additionaladdressvalidation=string`;
+    const serviceCode = this.getServiceCode(shipmentData.Country);
+    const stateProvinceCode = this.getStateCode(Receiver);
+    const requestBody = this.buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId);
 
-    const stateProvinceCode = Receiver.Country === 'US' ? 'GA' : undefined;
+    this.debugLog("Shipment Request", { url: this.getShipmentUrl(), headers: this.getHeaders(transId, accessToken), body: requestBody });
 
-    const requestBody = {
+    const response = await this.sendShipmentRequest(requestBody, transId, accessToken);
+    return this.handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId);
+  }
+
+  async getAccessToken() {
+    const accessToken = await OAuthService.getAccessToken();
+    if (!accessToken) {
+      throw new Error('Kein gültiger Access Token verfügbar.');
+    }
+    return accessToken;
+  }
+
+  getServiceCode(country) {
+    return country === 'DE' || country === 'NL' || country === 'BE' ? '11' : '65';
+  }
+
+  getStateCode(receiver) {
+    if (receiver.Country === 'US' && receiver.State) {
+      console.log(receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State);
+      return receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State;
+    }
+    return receiver.State;
+  }
+
+  buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId) {
+    const { OrderNr, Receiver, Sender } = shipmentData;
+    
+    return {
       ShipmentRequest: {
         Request: {
           SubVersion: "1801",
           RequestOption: 'nonvalidate',
-          TransactionReference: {
-            CustomerContext: ReferenceNumber
-          }
+          TransactionReference: { CustomerContext: OrderNr }
         },
         Shipment: {
           Description: 'Goalkeeper Goods',
-          Shipper: {
-            Name: Sender.Company,
-            AttentionName: Sender.Name,
-            ShipperNumber: process.env.SHIPPERNUMBER || 'G224H8',
-            TaxIdentificationNumber: 'DE332654187',
-            Phone: { Number: Sender.Phone || '0000', Extension: ' ' },
-            Address: {
-              AddressLine: Sender.AddressLine1,
-              City: Sender.City,
-              PostalCode: Sender.PostCode,
-              CountryCode: 'NL'
-            }
-          },
-          ShipTo: {
-            Name: Receiver.Name,
-            AttentionName: Receiver.Name,
-            Phone: { Number: Receiver.Phone },
-            EMailAddress: Receiver.Email,
-            Address: {
-              AddressLine: [
-                Receiver.AddressLine1,
-                Receiver.AddressLine2 || '',
-                Receiver.AddressLine3 || ''
-              ],
-              City: Receiver.City,
-              PostalCode: Receiver.PostalCode,
-              CountryCode: Receiver.Country,
-              StateProvinceCode: stateProvinceCode
-            }
-          },
-          ShipFrom: {
-            Name: Sender.Company,
-            AttentionName: Sender.Name,
-            Phone: { Number: Sender.Phone },
-            Address: {
-              AddressLine: Sender.AddressLine1,
-              City: Sender.City,
-              PostalCode: Sender.PostCode,
-              CountryCode: 'NL'
-            }
-          },
+          Shipper: this.buildAddress(Sender, 'NL', process.env.SHIPPERNUMBER || 'G224H8'),
+          ShipTo: this.buildAddress(Receiver, Receiver.Country, null, stateProvinceCode),
+          ShipFrom: this.buildAddress(Sender, 'NL', null),
           PaymentInformation: {
             ShipmentCharge: {
               Type: '01',
-              BillShipper: {
-                AccountNumber: process.env.SHIPPERNUMBER || 'G224H8'
-              }
+              BillShipper: { AccountNumber: process.env.SHIPPERNUMBER || 'G224H8' }
             }
           },
-          Service: {
-            Code: ServiceCode,
-            Description: shipmentData.Country === 'DE' || shipmentData.Country === 'NL' || shipmentData.Country === 'BE' ? 'UPS Standard' : 'UPS Saver'
-          },
+          Service: { Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) },
           Package: {
             Description: 'Goalkeeper Goods',
             Packaging: { Code: '02', Description: 'Box' },
             Dimensions: {
               UnitOfMeasurement: { Code: 'CM', Description: 'Centimeters' },
-              Length: '10',
-              Width: '10',
-              Height: '10'
+              Length: '10', Width: '10', Height: '10'
             },
-            PackageWeight: {
-              UnitOfMeasurement: { Code: 'KGS', Description: 'Kilograms' },
-              Weight: '1'
-            }
+            PackageWeight: { UnitOfMeasurement: { Code: 'KGS', Description: 'Kilograms' }, Weight: '1' }
           },
           ShipmentServiceOptions: {
             InternationalForms: {
               FormType: ['07'],
-              UserCreatedForm: [
-                {
-                  DocumentID: [documentId]
-                }
-              ]
-            }
-          }
-        },
-        LabelSpecification: {
-          LabelImageFormat: {
-            Code: 'ZPL',
-            Description: 'ZPL'
+              UserCreatedForm: [{ DocumentID: [documentId] }]
+            },
           },
-          LabelStockSize: {
-            Height: '6',
-            Width: '4'
-          }
-        }
+          ShipmentRatingOptions: {
+            NegotiatedRatesIndicator: "Y" // Indicator to request negotiated rates if eligible
+          },
+          
+          ReferenceNumber: [
+            {
+              Value: OrderNr.slice(0, 14) // Limit to 14 characters for compatibility
+            }
+          ]
+        },
+        LabelSpecification: { LabelImageFormat: { Code: 'ZPL', Description: 'ZPL' }, LabelStockSize: { Height: '6', Width: '4' } }
       }
     };
+  }
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'transId': transId,
-          'transactionSrc': 'testing',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      const data = await response.json();
-      const statusCode = response.status;
-
-      if (!response.ok || data.ShipmentResponse?.Response?.ResponseStatus?.Code !== '1') {
-        const errorMessage = data.ShipmentResponse?.Response?.Alert?.map(alert => alert.Description).join('; ') || 'Unbekannter Fehler';
-
-        // Speichere Fehler in den shipment_logs und shipments Tabellen
-        await DatabaseService.saveShipmentLog({
-          orderNr: OrderNr,
-          statusCode,
-          message: errorMessage
-        });
-
-        await DatabaseService.saveShipment({
-          orderNr: OrderNr,
-          deliveryNoteNr: DeliveryNoteNr,
-          trackingNumber: null,
-          service: ServiceCode,
-          labelZPLBase64: null,
-          shipmentCharges: null,
-          documentRecordId: documentId,
-          transactionIdentifier: transId,
-          errorMessage,
-          statusCode
-        });
-
-        throw new Error(`Fehler bei der Shipment-Anfrage: ${errorMessage}`);
+  buildAddress(person, countryCode, shipperNumber, stateProvinceCode = '') {
+    return {
+      Name: person.Company || person.Name,
+      AttentionName: person.Name,
+      ShipperNumber: shipperNumber,
+      Phone: { Number: person.Phone || '0000' },
+      Address: {
+        AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
+        City: person.City,
+        PostalCode: person.PostalCode,
+        CountryCode: countryCode,
+        StateProvinceCode: stateProvinceCode
       }
+    };
+  }
 
-      const shipmentResults = data.ShipmentResponse?.ShipmentResults;
-      const trackingNumber = shipmentResults?.ShipmentIdentificationNumber;
-      const packageResults = shipmentResults?.PackageResults;
-      const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
-      const shipmentCharges = JSON.stringify(shipmentResults?.ShipmentCharges);
+  getServiceDescription(country) {
+    return country === 'DE' || country === 'NL' || country === 'BE' ? 'UPS Standard' : 'UPS Saver';
+  }
 
-      if (!zplBase64 || !trackingNumber) {
-        throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
-      }
+  getShipmentUrl() {
+    return "https://onlinetools.ups.com/api/shipments/v1/ship?additionaladdressvalidation=string";
+  }
 
-      // Speichere erfolgreiches Shipment in der Datenbank
-      await DatabaseService.saveShipment({
-        orderNr: OrderNr,
-        deliveryNoteNr: DeliveryNoteNr,
-        trackingNumber,
-        service: ServiceCode,
-        labelZPLBase64: zplBase64,
-        shipmentCharges,
-        documentRecordId: documentId,
-        transactionIdentifier: transId,
-        errorMessage: null,
-        statusCode: 200
-      });
+  getHeaders(transId, accessToken) {
+    return {
+      'Content-Type': 'application/json',
+      'transId': transId,
+      'transactionSrc': 'testing',
+      'Authorization': `Bearer ${accessToken}`
+    };
+  }
 
-      // Speichere Erfolgsmeldung in den Logs
-      await DatabaseService.saveShipmentLog({
-        orderNr: OrderNr,
-        statusCode: 200,
-        message: 'Shipment erfolgreich erstellt.'
-      });
+  async sendShipmentRequest(requestBody, transId, accessToken) {
+    const response = await fetch(this.getShipmentUrl(), {
+      method: 'POST',
+      headers: this.getHeaders(transId, accessToken),
+      body: JSON.stringify(requestBody)
+    });
+    const data = await response.json();
+    this.debugLog("Shipment Response", { status: response.status, data });
+    return { data, statusCode: response.status };
+  }
 
-      return {
-        ZPLBase64: zplBase64,
-        TrackingNumber: trackingNumber,
-        DeliveryNoteNr,
-        Service: shipmentData.Country === 'DE' || shipmentData.Country === 'NL' || shipmentData.Country === 'BE' ? 'UPS Standard' : 'UPS Saver'
-      };
+  async handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId) {
+    const { data, statusCode } = response;
 
-    } catch (error) {
-      console.error('Fehler beim Erstellen des Shipments:', error.message);
-
-      await DatabaseService.saveShipmentLog({
-        orderNr: OrderNr,
-        statusCode: 500,
-        message: error.message
-      });
-
-      throw error;
+    if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
+      throw new Error(`Fehler bei der Shipment-Anfrage: ${data.response?.errors?.map(error => error.message).join('; ') || 'Unbekannter Fehler'}`);
     }
+
+    const shipmentResults = data.ShipmentResponse?.ShipmentResults;
+    const trackingNumber = shipmentResults?.ShipmentIdentificationNumber;
+    const packageResults = shipmentResults?.PackageResults;
+    const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
+    const internationalSignatureGraphicImage = packageResults?.ShippingLabel?.InternationalSignatureGraphicImage;
+    const shipmentCharges = JSON.stringify(shipmentResults?.NegotiatedRateCharges);
+
+    if (!zplBase64 || !trackingNumber) {
+      throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
+    }
+
+    // Speichern in der Datenbank
+    await DatabaseService.saveShipment({
+      ID: uuidv4(),
+      Referenz: shipmentData.OrderNr,
+      ShipTo: JSON.stringify(shipmentData.Receiver),
+      Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) }),
+      Document_record_id: documentRecordId,
+      StatusCode: statusCode,
+      TransactionIdentifier: transId,
+      ShipmentCharges: shipmentCharges,
+      TrackingNr: trackingNumber,
+      GraphicImage: zplBase64,
+      InternationalSignatureGraphicImage: internationalSignatureGraphicImage,
+      Benutzer: 'Test-User'
+    });
+
+    return {
+      ZPLBase64: zplBase64,
+      TrackingNumber: trackingNumber,
+      DeliveryNoteNr: shipmentData.DeliveryNoteNr,
+      Service: this.getServiceDescription(shipmentData.Country)
+    };
+  }
+
+  debugLog(title, details) {
+    console.log(`DEBUG: ${title}`);
+    console.log(JSON.stringify(details, null, 2));
   }
 }
 

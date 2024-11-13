@@ -1,4 +1,3 @@
-
 import express from 'express';
 import ShipmentController from '../controllers/shipmentController.js';
 import UploadDocumentService from '../services/UploadDocumentService.js';
@@ -25,12 +24,6 @@ router.post('/create_shipment', async (req, res) => {
   }
 
   try {
-    // Abrufen der Document ID aus der Datenbank
-    const documentData = await UploadDocumentService.getDocumentById(documentRecordId);
-    if (!documentData || !documentData.document_id) {
-      return res.status(404).json({ error: 'Document ID nicht gefunden.' });
-    }
-
     // Fülle die Daten für das Shipment
     const shipmentData = {
       OrderNr,
@@ -44,21 +37,22 @@ router.post('/create_shipment', async (req, res) => {
         AddressLine2: Receiver.AddressLine2 || '',
         AddressLine3: Receiver.AddressLine3 || '',
         City: Receiver.City,
-        PostalCode: Receiver.PostalCode,
+        PostalCode: String(Receiver.PostalCode), // Ensure PostalCode is a string
         Country: Receiver.Country,
         Phone: Receiver.Phone,
-        Email: Receiver.Email
+        Email: Receiver.Email,
+        State: Receiver.State // Include State in the payload
       },
       Sender: {
         Company: Sender.Company,
         Name: Sender.Name,
         AddressLine1: Sender.AddressLine1,
         City: Sender.City,
-        PostalCode: Sender.PostCode,
+        PostalCode: String(Sender.PostalCode), // Ensure PostalCode is a string
         Country: 'NL',
         Phone: Sender.Phone || '0000'
       },
-      documentId: documentData.document_id
+      documentRecordId: documentRecordId
     };
 
     // Erstelle das Shipment über den ShipmentController

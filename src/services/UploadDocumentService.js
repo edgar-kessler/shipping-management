@@ -11,12 +11,12 @@ class UploadDocumentService {
     this.shipperNumber = process.env.SHIPPER_NUMBER;
   }
 
-  // Methode zum Hochladen eines Dokuments und Speichern in der Datenbank
+  // Method to upload a document and save it to the MySQL database
   async uploadDocument(base64File, fileName, fileFormat = 'pdf', documentType = '002') {
     try {
       const accessToken = await OAuthService.getAccessToken();
       if (!accessToken) {
-        throw new Error('Kein gültiger Access Token verfügbar.');
+        throw new Error('No valid Access Token available.');
       }
 
       const transId = this.generateTransactionId();
@@ -54,47 +54,44 @@ class UploadDocumentService {
       });
 
       if (!response.ok) {
-        throw new Error(`Fehler: ${response.status} ${response.statusText}`);
+        throw new Error(`Error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
 
       const documentId = data?.UploadResponse?.FormsHistoryDocumentID?.DocumentID[0];
       if (!documentId) {
-        throw new Error('Fehler beim Hochladen des Dokuments: DocumentID fehlt in der Antwort.');
+        throw new Error('Error uploading document: DocumentID is missing in response.');
       }
 
-      // Dokument in der Datenbank speichern
+      // Save the document to the MySQL database
       const db = await DatabaseService.getDb();
       const timestamp = new Date().toISOString();
 
-      const result = await db.run(
+      const [result] = await db.execute(
         `INSERT INTO documents (document_id, transaction_id, file_name, file_data, timestamp)
          VALUES (?, ?, ?, ?, ?)`,
-        documentId,
-        transId,
-        fileName,
-        base64File,
-        timestamp
+        [documentId, transId, fileName, base64File, timestamp]
       );
 
-      const recordId = result.lastID;
-      console.log('Dokument erfolgreich hochgeladen und in der Datenbank gespeichert. Record ID:', recordId);
+      const recordId = result.insertId;
+      console.log('Document successfully uploaded and saved in the database. Record ID:', recordId);
 
       return recordId;
 
     } catch (error) {
-      console.error('Fehler beim Hochladen des Dokuments:', error);
+      console.error('Error uploading document:', error);
       throw error;
     }
   }
+
   async getDocumentById(documentRecordId) {
     const db = await DatabaseService.getDb();
-    const documentData = await db.get(`SELECT document_id FROM documents WHERE id = ?`, documentRecordId);
-    return documentData;
+    const [documentData] = await db.execute(`SELECT document_id FROM documents WHERE id = ?`, [documentRecordId]);
+    return documentData[0];
   }
 
-  // Hilfsmethode zum Generieren einer eindeutigen Transaktions-ID (32 Zeichen)
+  // Helper method to generate a unique transaction ID (32 characters)
   generateTransactionId() {
     return Math.random().toString(36).substring(2, 34).padEnd(32, '0');
   }

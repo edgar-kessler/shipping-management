@@ -1,33 +1,40 @@
 // src/services/DatabaseService.js
-
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import mysql from 'mysql2/promise';
+import { DateTime } from 'luxon'; // Import Luxon
 
 class DatabaseService {
   constructor() {
-    this.db = null;
+    // Initialize MySQL connection pool
+    this.connection = mysql.createPool({
+      host: '65.21.242.103',
+      user: 'db_admin',
+      password: '^j"2Tf"3N9&Mi6#_Ra/$',
+      database: 'shipping-management',
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    });
+  }
+
+  async getDb() {
+    return this.connection;
   }
 
   async initializeDatabase() {
-    this.db = await open({
-      filename: './database.sqlite',
-      driver: sqlite3.Database
-    });
+    const db = await this.getDb();
 
-    // Tokens-Tabelle
-    await this.db.exec(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INT AUTO_INCREMENT PRIMARY KEY,
         access_token TEXT,
         refresh_token TEXT,
-        expires_at INTEGER
+        expires_at BIGINT
       )
     `);
 
-    // Documents-Tabelle
-    await this.db.exec(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS documents (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INT AUTO_INCREMENT PRIMARY KEY,
         document_id TEXT,
         transaction_id TEXT,
         file_name TEXT,
@@ -36,82 +43,83 @@ class DatabaseService {
       )
     `);
 
-    // Shipments-Tabelle
-    await this.db.exec(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS shipments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_nr TEXT,
-        delivery_note_nr TEXT,
-        tracking_number TEXT,
-        service TEXT,
-        label_zpl_base64 TEXT,
-        shipment_charges TEXT,
-        date_created TEXT,
-        document_record_id INTEGER,
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        referenz TEXT,
+        ship_to JSON,
+        service JSON,
+        document_record_id BIGINT,
+        status_code INT DEFAULT NULL,
         transaction_identifier TEXT,
-        error_message TEXT,
-        status_code INTEGER DEFAULT NULL
+        shipment_charges JSON,
+        tracking_nr TEXT,
+        graphic_image TEXT,
+        international_signature_graphic_image TEXT,
+        benutzer TEXT,
+        date_created TEXT
       )
     `);
 
-    // Shipment Logs-Tabelle
-    await this.db.exec(`
+    await db.query(`
       CREATE TABLE IF NOT EXISTS shipment_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id INT AUTO_INCREMENT PRIMARY KEY,
         order_nr TEXT,
-        status_code INTEGER,
+        status_code INT,
         message TEXT,
         timestamp TEXT
       )
     `);
 
-    console.info('Tabellen "tokens", "documents", "shipments" und "shipment_logs" erfolgreich erstellt oder existieren bereits');
+    console.info('Tables "tokens", "documents", "shipments", and "shipment_logs" successfully created or already exist in MySQL');
   }
 
-  async getDb() {
-    if (!this.db) {
-      await this.initializeDatabase();
-    }
-    return this.db;
+  // Use Luxon to get the current time in Berlin timezone in "HH:mm:ss dd-MM-yyyy" format
+  getCurrentBerlinTime() {
+    return DateTime.now()
+      .setZone('Europe/Berlin')
+      .toFormat('HH:mm:ss dd-MM-yyyy');
   }
 
-  // Methode zum Speichern von Shipments
   async saveShipment(data) {
     const {
-      orderNr, deliveryNoteNr, trackingNumber, service, labelZPLBase64,
-      shipmentCharges, documentRecordId, transactionIdentifier, errorMessage, statusCode
+      ID, Referenz, ShipTo, Service, Document_record_id,
+      StatusCode, TransactionIdentifier, ShipmentCharges,
+      TrackingNr, GraphicImage, InternationalSignatureGraphicImage,
+      Benutzer
     } = data;
 
-    const dateCreated = new Date().toISOString();
+    const dateCreated = this.getCurrentBerlinTime();
 
     const query = `
       INSERT INTO shipments (
-        order_nr, delivery_note_nr, tracking_number, service, label_zpl_base64,
-        shipment_charges, date_created, document_record_id, transaction_identifier, error_message, status_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        referenz, ship_to, service, document_record_id, status_code,
+        transaction_identifier, shipment_charges, tracking_nr, 
+        graphic_image, international_signature_graphic_image, benutzer, date_created
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
-      orderNr, deliveryNoteNr, trackingNumber, service, labelZPLBase64,
-      shipmentCharges, dateCreated, documentRecordId, transactionIdentifier, errorMessage, statusCode
+      Referenz, ShipTo, Service, Document_record_id, StatusCode,
+      TransactionIdentifier, ShipmentCharges, TrackingNr, 
+      GraphicImage, InternationalSignatureGraphicImage, Benutzer, dateCreated
     ];
 
     try {
       const db = await this.getDb();
-      await db.run(query, params);
+      await db.query(query, params);
     } catch (error) {
       console.error('Error saving shipment:', error);
       throw error;
     }
   }
 
-  // Methode zum Speichern von Shipment Logs
   async saveShipmentLog(data) {
     const {
       orderNr, statusCode, message
     } = data;
 
-    const timestamp = new Date().toISOString();
+    const timestamp = this.getCurrentBerlinTime();
 
     const query = `
       INSERT INTO shipment_logs (
@@ -125,11 +133,19 @@ class DatabaseService {
 
     try {
       const db = await this.getDb();
-      await db.run(query, params);
+      await db.query(query, params);
     } catch (error) {
       console.error('Error saving shipment log:', error);
       throw error;
     }
+  }
+
+  async getLatestToken() {
+    const db = await this.getDb();
+    const [rows] = await db.query(
+      `SELECT access_token, refresh_token, expires_at FROM tokens ORDER BY id DESC LIMIT 1`
+    );
+    return rows[0] || null;
   }
 }
 

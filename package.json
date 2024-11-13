@@ -13,13 +13,18 @@
   "description": "",
   "type": "module",
   "dependencies": {
+    "date-fns-tz": "^3.2.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
+    "luxon": "^3.5.0",
+    "mysql2": "^3.11.4",
     "node-fetch": "^3.3.2",
     "open": "^10.1.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "uuid": "^11.0.2"
+    "us-state-codes": "^1.1.2",
+    "uuid": "^11.0.2",
+    "zipcodes": "^8.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

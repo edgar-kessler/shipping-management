@@ -1,3 +1,5 @@
+// src/services/TokenStorageService.js
+
 import DatabaseService from './DatabaseService.js';
 
 class TokenStorageService {
@@ -5,18 +7,15 @@ class TokenStorageService {
     const db = await DatabaseService.getDb();
     const expiresAt = Date.now() + data.expires_in * 1000;
 
-    await db.run(
+    await db.query(
       `INSERT INTO tokens (access_token, refresh_token, expires_at) VALUES (?, ?, ?)`,
-      data.access_token,
-      data.refresh_token,
-      expiresAt
+      [data.access_token, data.refresh_token, expiresAt]
     );
-    console.log('Access Token erfolgreich in der Datenbank gespeichert');
+    console.log('Access Token successfully saved in the database');
   }
 
   async getLatestToken() {
-    const db = await DatabaseService.getDb();
-    return db.get(`SELECT access_token, refresh_token, expires_at FROM tokens ORDER BY id DESC LIMIT 1`);
+    return await DatabaseService.getLatestToken(); // Fetches the latest token through DatabaseService
   }
 
   async isTokenExpired(expiresAt) {
