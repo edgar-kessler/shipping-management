@@ -18,7 +18,6 @@ class ShipmentController {
       throw new Error("documentRecordId is missing from shipmentData.");
     }
 
-    // Log initiation of the shipment request
     await DatabaseService.saveShipmentLog(
       "Create Shipment - Initiated",
       shipmentData,
@@ -44,7 +43,6 @@ class ShipmentController {
     const stateProvinceCode = this.getStateCode(Receiver);
     const requestBody = this.buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentData.document_id);
 
-    // Log the request payload
     await DatabaseService.saveShipmentLog(
       "Shipment Request Payload",
       requestBody,
@@ -54,7 +52,6 @@ class ShipmentController {
 
     const response = await this.sendShipmentRequest(requestBody, transId, accessToken);
 
-    // Save the response log from UPS
     await DatabaseService.saveShipmentLog(
       "Shipment Response",
       requestBody,
@@ -140,6 +137,22 @@ class ShipmentController {
     };
   }
 
+  buildAddress(person, countryCode, shipperNumber = null, stateProvinceCode = '') {
+    return {
+      Name: person.Company || person.Name,
+      AttentionName: person.Name,
+      ShipperNumber: shipperNumber,
+      Phone: { Number: person.Phone || '0000' },
+      Address: {
+        AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
+        City: person.City,
+        PostalCode: person.PostalCode,
+        CountryCode: countryCode,
+        StateProvinceCode: stateProvinceCode
+      }
+    };
+  }
+
   async sendShipmentRequest(requestBody, transId, accessToken) {
     const response = await fetch(this.getShipmentUrl(), {
       method: 'POST',
@@ -148,7 +161,6 @@ class ShipmentController {
     });
     const data = await response.json();
 
-    // Log the UPS API response status and data
     await DatabaseService.saveShipmentLog(
       "UPS API Response",
       requestBody,
@@ -194,7 +206,6 @@ class ShipmentController {
       throw new Error(errorMessage);
     }
 
-    // Log successful shipment saving to the database
     await DatabaseService.saveShipment({
       ID: uuidv4(),
       Referenz: shipmentData.OrderNr,
