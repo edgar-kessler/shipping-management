@@ -44,6 +44,16 @@ class DatabaseService {
     `);
 
     await db.query(`
+      CREATE TABLE IF NOT EXISTS shipment_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        order_nr TEXT,
+        status_code INT,
+        message TEXT,
+        timestamp TEXT
+      )
+    `);
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS shipments (
         id INT AUTO_INCREMENT PRIMARY KEY,
         referenz TEXT,
@@ -114,23 +124,20 @@ class DatabaseService {
     }
   }
 
-  async saveShipmentLog(data) {
-    const {
-      orderNr, statusCode, message
-    } = data;
-
+  async saveShipmentLog(endpoint, requestData, responseData, statusCode) {
     const timestamp = this.getCurrentBerlinTime();
-
     const query = `
-      INSERT INTO shipment_logs (
-        order_nr, status_code, message, timestamp
-      ) VALUES (?, ?, ?, ?)
+      INSERT INTO logs_shipments (endpoint, request_data, response_data, status_code, timestamp)
+      VALUES (?, ?, ?, ?, ?)
     `;
-
     const params = [
-      orderNr, statusCode, message, timestamp
+      endpoint,
+      JSON.stringify(requestData),
+      JSON.stringify(responseData),
+      statusCode,
+      timestamp
     ];
-
+  
     try {
       const db = await this.getDb();
       await db.query(query, params);
@@ -146,6 +153,28 @@ class DatabaseService {
       `SELECT access_token, refresh_token, expires_at FROM tokens ORDER BY id DESC LIMIT 1`
     );
     return rows[0] || null;
+  }
+  async saveLog(endpoint, requestData, responseData, statusCode) {
+    const timestamp = this.getCurrentBerlinTime();
+    const query = `
+      INSERT INTO logs_shipments (endpoint, request_data, response_data, status_code, timestamp)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    const params = [
+      endpoint,
+      JSON.stringify(requestData),
+      JSON.stringify(responseData),
+      statusCode,
+      timestamp
+    ];
+
+    try {
+      const db = await this.getDb();
+      await db.query(query, params);
+    } catch (error) {
+      console.error('Error saving log:', error);
+      throw error;
+    }
   }
 }
 

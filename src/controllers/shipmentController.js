@@ -8,34 +8,34 @@ import { getStateCodeByStateName } from 'us-state-codes';
 class ShipmentController {
   async createShipment(shipmentData) {
     const { OrderNr, DeliveryNoteNr, Receiver, Sender, documentRecordId } = shipmentData;
-    console.log("Received documentRecordId:", documentRecordId);
     if (!documentRecordId) {
       throw new Error("documentRecordId is missing from shipmentData.");
     }
 
     const documentData = await UploadDocumentService.getDocumentById(documentRecordId);
-    console.log("Fetched documentData:", documentData);
-
-    if (!documentData) {
-      throw new Error(`Document with ID ${documentRecordId} could not be found.`);
-    }
-    if (!documentData.document_id) {
+    if (!documentData || !documentData.document_id) {
       throw new Error(`Document with ID ${documentRecordId} has no valid document_id.`);
     }
-
-    const documentId = documentData.document_id;
-    console.log("Fetched documentId:", documentId);
-    console.log(shipmentData.State);
 
     const accessToken = await this.getAccessToken();
     const transId = uuidv4();
     const serviceCode = this.getServiceCode(shipmentData.Country);
     const stateProvinceCode = this.getStateCode(Receiver);
-    const requestBody = this.buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId);
+    const requestBody = this.buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentData.document_id);
 
+    // Log the request
     this.debugLog("Shipment Request", { url: this.getShipmentUrl(), headers: this.getHeaders(transId, accessToken), body: requestBody });
 
     const response = await this.sendShipmentRequest(requestBody, transId, accessToken);
+
+    // Save the response log
+    await DatabaseService.saveLog(
+      "Shipment Response",
+      requestBody,
+      { status: response.statusCode, data: response.data },
+      response.statusCode
+    );
+
     return this.handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId);
   }
 
@@ -53,7 +53,6 @@ class ShipmentController {
 
   getStateCode(receiver) {
     if (receiver.Country === 'US' && receiver.State) {
-      console.log(receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State);
       return receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State;
     }
     return receiver.State;
@@ -110,39 +109,6 @@ class ShipmentController {
     };
   }
 
-  buildAddress(person, countryCode, shipperNumber, stateProvinceCode = '') {
-    return {
-      Name: person.Company || person.Name,
-      AttentionName: person.Name,
-      ShipperNumber: shipperNumber,
-      Phone: { Number: person.Phone || '0000' },
-      Address: {
-        AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
-        City: person.City,
-        PostalCode: person.PostalCode,
-        CountryCode: countryCode,
-        StateProvinceCode: stateProvinceCode
-      }
-    };
-  }
-
-  getServiceDescription(country) {
-    return country === 'DE' || country === 'NL' || country === 'BE' ? 'UPS Standard' : 'UPS Saver';
-  }
-
-  getShipmentUrl() {
-    return "https://onlinetools.ups.com/api/shipments/v1/ship?additionaladdressvalidation=string";
-  }
-
-  getHeaders(transId, accessToken) {
-    return {
-      'Content-Type': 'application/json',
-      'transId': transId,
-      'transactionSrc': 'testing',
-      'Authorization': `Bearer ${accessToken}`
-    };
-  }
-
   async sendShipmentRequest(requestBody, transId, accessToken) {
     const response = await fetch(this.getShipmentUrl(), {
       method: 'POST',
@@ -150,10 +116,9 @@ class ShipmentController {
       body: JSON.stringify(requestBody)
     });
     const data = await response.json();
-    this.debugLog("Shipment Response - ", { status: response.status, data });
+    this.debugLog("Shipment Response", { status: response.status, data });
     if (!response.ok) {
-      // Directly return the full response data in case of an error
-      return { status: response.status, data };
+      return { statusCode: response.status, data };
     }
     return { data, statusCode: response.status };
   }
@@ -162,7 +127,6 @@ class ShipmentController {
     const { data, statusCode } = response;
 
     if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
-      // Return the UPS response directly for debugging
       return { error: "Fehler beim Erstellen des Shipments", UPSResponse: response };
     }
 
