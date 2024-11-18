@@ -56,11 +56,27 @@ class ShipmentController {
 
   getStateCode(receiver) {
     if (receiver.Country === 'US' && receiver.State) {
-      console.log(receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State);
-      return receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State;
+        // Debugging: Log den Eingabewert des States
+        console.log(`Original State: ${receiver.State}`);
+        
+        // Wenn der State bereits 2 Buchstaben hat, unverändert zurückgeben
+        if (receiver.State.length === 2) {
+            console.log(`Returning existing 2-letter State Code: ${receiver.State}`);
+            return receiver.State;
+        }
+        
+        // Wenn der State länger als 2 Buchstaben ist, versuchen, den Namen zu konvertieren
+        const stateCode = getStateCodeByStateName(receiver.State);
+        if (!stateCode) {
+            throw new Error(`Invalid state name: ${receiver.State}`);
+        }
+        console.log(`Converted State Name to Code: ${stateCode}`);
+        return stateCode;
     }
+    
+    // Falls kein Land oder State angegeben ist, zurückgeben
     return receiver.State;
-  }
+}
 
   buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId) {
     const { OrderNr, Receiver, Sender } = shipmentData;
@@ -142,7 +158,7 @@ class ShipmentController {
     return {
       'Content-Type': 'application/json',
       'transId': transId,
-      'transactionSrc': 'testing',
+      'transactionSrc': '',
       'Authorization': `Bearer ${accessToken}`
     };
   }
