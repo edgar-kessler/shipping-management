@@ -51,8 +51,7 @@ class ShipmentController {
   }
 
   getServiceCode(receiver) {
-    console.log("country:",receiver.Country)
-    // Für Deutschland, Niederlande und Belgien sollte immer Service-Code "11" zurückgegeben werden
+
     if (receiver.Country === "DE" || receiver.Country === "NL" || receiver.Country === "BE") {
         return "11";
     }
@@ -157,7 +156,12 @@ class ShipmentController {
 
 
   getServiceDescription(receiver) {
-    return receiver.Country === 'DE' || receiver.Country === 'NL' || receiver.Country === 'BE' ? 'UPS Standard' : 'UPS Saver';
+    if (receiver.Country === "DE" || receiver.Country === "NL" || receiver.Country === "BE") {
+      return "UPS Standard";
+    }
+
+    // Für alle anderen Länder sollte der Standard-Service-Code "65" gelten
+    return "UPS Express Saver";
   }
 
   getShipmentUrl() {
