@@ -32,7 +32,7 @@ class ShipmentController {
 
     const accessToken = await this.getAccessToken();
     const transId = uuidv4();
-    const serviceCode = this.getServiceCode(shipmentData.Country);
+    const serviceCode = this.getServiceCode(Receiver);
     const stateProvinceCode = this.getStateCode(Receiver);
     const requestBody = this.buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId);
 
@@ -50,10 +50,10 @@ class ShipmentController {
     return accessToken;
   }
 
-  getServiceCode(country) {
-    console.log("country:",country)
+  getServiceCode(receiver) {
+    console.log("country:",receiver.Country)
     // Für Deutschland, Niederlande und Belgien sollte immer Service-Code "11" zurückgegeben werden
-    if (country === "DE" || country === "NL" || country === "BE") {
+    if (receiver.Country === "DE" || receiver.Country === "NL" || receiver.Country === "BE") {
         return "11";
     }
 
