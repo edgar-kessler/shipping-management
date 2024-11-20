@@ -215,7 +215,7 @@ class ShipmentController {
         ID: uuidv4(),
         Referenz: shipmentData.OrderNr,
         ShipTo: JSON.stringify(shipmentData.Receiver),
-        Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(receiver) }),
+        Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(shipmentData.Receiver) }),
         Document_record_id: documentRecordId,
         StatusCode: statusCode,
         TransactionIdentifier: transId,
