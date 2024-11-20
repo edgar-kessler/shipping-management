@@ -51,7 +51,7 @@ class ShipmentController {
   }
 
   getServiceCode(country) {
-    console.log(country)
+    console.log("country:",country)
     // Für Deutschland, Niederlande und Belgien sollte immer Service-Code "11" zurückgegeben werden
     if (country === "DE" || country === "NL" || country === "BE") {
         return "11";
