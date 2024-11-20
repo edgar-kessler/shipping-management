@@ -51,8 +51,16 @@ class ShipmentController {
   }
 
   getServiceCode(country) {
-    return country === 'DE' || country === 'NL' || country === 'BE' ? '11' : '65';
+    console.log(country)
+    // Für Deutschland, Niederlande und Belgien sollte immer Service-Code "11" zurückgegeben werden
+    if (country === "DE" || country === "NL" || country === "BE") {
+        return "11";
+    }
+
+    // Für alle anderen Länder sollte der Standard-Service-Code "65" gelten
+    return "65";
   }
+
 
   getStateCode(receiver) {
     if (receiver.Country === 'US' && receiver.State) {
@@ -179,8 +187,11 @@ class ShipmentController {
   async handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId) {
     const { data, statusCode } = response;
 
-    if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
-      throw new Error(`Fehler bei der Shipment-Anfrage: ${data.response?.errors?.map(error => error.message).join('; ') || 'Unbekannter Fehler'}`);
+    // Überprüfen, ob die UPS-Antwort erfolgreich ist
+    const isSuccess = data?.ShipmentResponse?.Response?.ResponseStatus?.Code === '1';
+    if (!isSuccess) {
+        // Vollständigen Response zurückgeben, falls ein Fehler auftritt
+        throw new Error(`UPS ERROR: ${JSON.stringify(data, null, 2)}`);
     }
 
     const shipmentResults = data.ShipmentResponse?.ShipmentResults;
@@ -191,32 +202,34 @@ class ShipmentController {
     const shipmentCharges = JSON.stringify(shipmentResults?.NegotiatedRateCharges);
 
     if (!zplBase64 || !trackingNumber) {
-      throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
+        // Label oder Trackingnummer fehlt, vollständigen UPS-Response im Fehler zurückgeben
+        throw new Error(`Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt. UPS Response: ${JSON.stringify(data, null, 2)}`);
     }
 
     // Speichern in der Datenbank
     await DatabaseService.saveShipment({
-      ID: uuidv4(),
-      Referenz: shipmentData.OrderNr,
-      ShipTo: JSON.stringify(shipmentData.Receiver),
-      Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) }),
-      Document_record_id: documentRecordId,
-      StatusCode: statusCode,
-      TransactionIdentifier: transId,
-      ShipmentCharges: shipmentCharges,
-      TrackingNr: trackingNumber,
-      GraphicImage: zplBase64,
-      InternationalSignatureGraphicImage: internationalSignatureGraphicImage,
-      Benutzer: 'Test-User'
+        ID: uuidv4(),
+        Referenz: shipmentData.OrderNr,
+        ShipTo: JSON.stringify(shipmentData.Receiver),
+        Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) }),
+        Document_record_id: documentRecordId,
+        StatusCode: statusCode,
+        TransactionIdentifier: transId,
+        ShipmentCharges: shipmentCharges,
+        TrackingNr: trackingNumber,
+        GraphicImage: zplBase64,
+        InternationalSignatureGraphicImage: internationalSignatureGraphicImage,
+        Benutzer: 'Test-User'
     });
 
     return {
-      ZPLBase64: zplBase64,
-      TrackingNumber: trackingNumber,
-      DeliveryNoteNr: shipmentData.DeliveryNoteNr,
-      Service: this.getServiceDescription(shipmentData.Country)
+        ZPLBase64: zplBase64,
+        TrackingNumber: trackingNumber,
+        DeliveryNoteNr: shipmentData.DeliveryNoteNr,
+        Service: this.getServiceDescription(shipmentData.Country)
     };
   }
+
 
   debugLog(title, details) {
     console.log(`DEBUG: ${title}`);
