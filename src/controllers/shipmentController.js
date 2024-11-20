@@ -230,7 +230,7 @@ class ShipmentController {
         ZPLBase64: zplBase64,
         TrackingNumber: trackingNumber,
         DeliveryNoteNr: shipmentData.DeliveryNoteNr,
-        Service: this.getServiceDescription(receiver)
+        Service: this.getServiceDescription(shipmentData.Receiver)
     };
   }
 
