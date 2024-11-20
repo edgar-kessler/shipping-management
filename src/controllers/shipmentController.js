@@ -156,8 +156,8 @@ class ShipmentController {
   }
 
 
-  getServiceDescription(country) {
-    return country === 'DE' || country === 'NL' || country === 'BE' ? 'UPS Standard' : 'UPS Saver';
+  getServiceDescription(receiver) {
+    return receiver.Country === 'DE' || receiver.Country === 'NL' || receiver.Country === 'BE' ? 'UPS Standard' : 'UPS Saver';
   }
 
   getShipmentUrl() {
@@ -211,7 +211,7 @@ class ShipmentController {
         ID: uuidv4(),
         Referenz: shipmentData.OrderNr,
         ShipTo: JSON.stringify(shipmentData.Receiver),
-        Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) }),
+        Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(receiver) }),
         Document_record_id: documentRecordId,
         StatusCode: statusCode,
         TransactionIdentifier: transId,
