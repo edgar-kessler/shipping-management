@@ -106,7 +106,7 @@ class ShipmentController {
               BillShipper: { AccountNumber: process.env.SHIPPERNUMBER || 'G224H8' }
             }
           },
-          Service: { Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) },
+          Service: { Code: serviceCode, Description: this.getServiceDescription(shipmentData.Receiver) },
           Package: {
             Description: 'Goalkeeper Goods',
             Packaging: { Code: '02', Description: 'Box' },
