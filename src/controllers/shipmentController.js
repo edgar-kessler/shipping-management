@@ -131,20 +131,22 @@ class ShipmentController {
   }
 
   buildAddress(person, countryCode, shipperNumber, stateProvinceCode = '') {
+    const includeStateProvince = !(countryCode === 'DE' || countryCode === 'UK'); // Exclude for DE and UK
     return {
-      Name: person.Company || person.Name,
-      AttentionName: person.Name,
-      ShipperNumber: shipperNumber,
-      Phone: { Number: person.Phone || '0000' },
-      Address: {
-        AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
-        City: person.City,
-        PostalCode: person.PostalCode,
-        CountryCode: countryCode,
-        StateProvinceCode: stateProvinceCode
-      }
+        Name: person.Company || person.Name,
+        AttentionName: person.Name,
+        ShipperNumber: shipperNumber,
+        Phone: { Number: person.Phone || '0000' },
+        Address: {
+            AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
+            City: person.City,
+            PostalCode: person.PostalCode,
+            CountryCode: countryCode,
+            ...(includeStateProvince && { StateProvinceCode: stateProvinceCode }) // Include only if condition is met
+        }
     };
   }
+
 
   getServiceDescription(country) {
     return country === 'DE' || country === 'NL' || country === 'BE' ? 'UPS Standard' : 'UPS Saver';
