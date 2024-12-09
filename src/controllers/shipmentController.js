@@ -121,14 +121,27 @@ class ShipmentController {
               FormType: ['07'],
               UserCreatedForm: [{ DocumentID: [documentId] }]
             },
+            Notification: [
+              {
+                NotificationCode: "6", // E-Mail Benachrichtigung
+                EMail: {
+                  EMailAddress: Receiver.Email
+                }
+              },
+              {
+                NotificationCode: "8", // SMS Benachrichtigung
+                TextMessage: {
+                  PhoneNumber: Receiver.Phone
+                }
+              }
+            ]
           },
           ShipmentRatingOptions: {
-            NegotiatedRatesIndicator: "Y" // Indicator to request negotiated rates if eligible
+            NegotiatedRatesIndicator: "Y"
           },
-          
           ReferenceNumber: [
             {
-              Value: OrderNr.slice(0, 14) // Limit to 14 characters for compatibility
+              Value: OrderNr.slice(0, 14)
             }
           ]
         },
@@ -136,6 +149,7 @@ class ShipmentController {
       }
     };
   }
+
 
   buildAddress(person, countryCode, shipperNumber, stateProvinceCode = '') {
     const includeStateProvince = !(countryCode === 'DE' || countryCode === 'UK'); // Exclude for DE and UK
