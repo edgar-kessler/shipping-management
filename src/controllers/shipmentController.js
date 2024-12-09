@@ -123,15 +123,15 @@ class ShipmentController {
             },
             Notification: [
               {
-                NotificationCode: "6", // E-Mail Benachrichtigung
+                NotificationCode: "6", // QV Ship Notification per E-Mail
                 EMail: {
                   EMailAddress: Receiver.Email
                 }
               },
               {
-                NotificationCode: "8", // SMS Benachrichtigung
-                TextMessage: {
-                  PhoneNumber: Receiver.Phone
+                NotificationCode: "8", // QV Delivery Notification per E-Mail
+                EMail: {
+                  EMailAddress: Receiver.Email
                 }
               }
             ]
@@ -141,14 +141,18 @@ class ShipmentController {
           },
           ReferenceNumber: [
             {
-              Value: OrderNr.slice(0, 14)
+              Value: OrderNr.slice(0, 14) // Limit auf 14 Zeichen
             }
           ]
         },
-        LabelSpecification: { LabelImageFormat: { Code: 'ZPL', Description: 'ZPL' }, LabelStockSize: { Height: '6', Width: '4' } }
+        LabelSpecification: { 
+          LabelImageFormat: { Code: 'ZPL', Description: 'ZPL' }, 
+          LabelStockSize: { Height: '6', Width: '4' } 
+        }
       }
     };
   }
+
 
 
   buildAddress(person, countryCode, shipperNumber, stateProvinceCode = '') {
