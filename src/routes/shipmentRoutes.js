@@ -50,7 +50,8 @@ router.post('/create_shipment', async (req, res) => {
         City: Sender.City,
         PostalCode: String(Sender.PostalCode), // Ensure PostalCode is a string
         Country: 'NL',
-        Phone: Sender.Phone || '0000'
+        Phone: Sender.Phone || '0000',
+        Email: 'edgar.kessler@prokeepersline.com'
       },
       documentRecordId: documentRecordId
     };
@@ -61,7 +62,29 @@ router.post('/create_shipment', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Fehler beim Erstellen des Shipments:', error);
-    res.status(500).json({ error: 'Fehler beim Erstellen des Shipments.' });
+    
+    // Prüfe, ob es sich um einen UPS-Fehler handelt
+    if (error.message && error.message.includes('UPS ERROR:')) {
+      try {
+        // Extrahiere den UPS-Fehler aus der Fehlermeldung
+        const upsError = JSON.parse(error.message.replace('UPS ERROR: ', ''));
+        return res.status(400).json({
+          error: 'UPS Fehler',
+          details: upsError.ShipmentResponse?.Response?.Error || upsError
+        });
+      } catch (parseError) {
+        // Falls der JSON.parse fehlschlägt, sende die originale Fehlermeldung
+        return res.status(400).json({
+          error: error.message
+        });
+      }
+    }
+    
+    // Für alle anderen Fehler
+    res.status(500).json({
+      error: 'Interner Server-Fehler',
+      message: error.message
+    });
   }
 });
 

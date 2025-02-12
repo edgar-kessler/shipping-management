@@ -121,20 +121,7 @@ class ShipmentController {
               FormType: ['07'],
               UserCreatedForm: [{ DocumentID: [documentId] }]
             },
-            Notification: [
-              {
-                NotificationCode: "6", // QV Ship Notification per E-Mail
-                EMail: {
-                  EMailAddress: Receiver.Email
-                }
-              },
-              {
-                NotificationCode: "8", // QV Delivery Notification per E-Mail
-                EMail: {
-                  EMailAddress: Receiver.Email
-                }
-              }
-            ]
+
           },
           ShipmentRatingOptions: {
             NegotiatedRatesIndicator: "Y"
@@ -162,6 +149,7 @@ class ShipmentController {
         AttentionName: person.Name,
         ShipperNumber: shipperNumber,
         Phone: { Number: person.Phone || '0000' },
+        EMailAddress: person.Email || (countryCode === 'NL' ? 'edgar.kessler@prokeepersline.com' : undefined),
         Address: {
             AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
             City: person.City,
