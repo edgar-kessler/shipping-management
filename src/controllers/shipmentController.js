@@ -90,11 +90,36 @@ class ShipmentController {
   }
 
   getStateCode(receiver) {
-    if (receiver.Country === 'US' && receiver.State) {
-      console.log(receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State);
-      return receiver.State.length > 2 ? getStateCodeByStateName(receiver.State) : receiver.State;
+    // Remove state/province for Germany and UK
+    if (receiver.Country === 'DE' || receiver.Country === 'GB') {
+      return '';
     }
-    return receiver.State;
+
+    // Handle US states
+    if (receiver.Country === 'US' && receiver.State) {
+      try {
+        // If already a 2-letter code, validate it exists
+        if (receiver.State.length === 2) {
+          const stateName = getStateCodeByStateName(receiver.State);
+          if (stateName) {
+            return receiver.State.toUpperCase(); // Return validated code
+          }
+        }
+        
+        // Convert full state name to code
+        const stateCode = getStateCodeByStateName(receiver.State);
+        if (stateCode) {
+          console.log(`Converted ${receiver.State} to ${stateCode}`);
+          return stateCode;
+        }
+        
+        console.warn(`Unknown US state: ${receiver.State}`);
+      } catch (error) {
+        console.error(`State code conversion error: ${error.message}`);
+      }
+    }
+    
+    return receiver.State || '';
   }
 
   buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId) {
@@ -149,7 +174,7 @@ class ShipmentController {
   }
 
   buildAddress(person, countryCode, shipperNumber, stateProvinceCode = '') {
-    return {
+    const address = {
       Name: person.Company || person.Name,
       AttentionName: person.Name,
       ShipperNumber: shipperNumber,
@@ -159,10 +184,16 @@ class ShipmentController {
         AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
         City: person.City,
         PostalCode: person.PostalCode,
-        CountryCode: countryCode,
-        StateProvinceCode: stateProvinceCode
+        CountryCode: countryCode
       }
     };
+    
+    // Only include StateProvinceCode if it's not empty and not for DE/GB
+    if (stateProvinceCode && countryCode !== 'DE' && countryCode !== 'GB') {
+      address.Address.StateProvinceCode = stateProvinceCode;
+    }
+    
+    return address;
   }
 
   getServiceDescription(serviceCode) {
