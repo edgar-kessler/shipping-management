@@ -1,19 +1,20 @@
 // src/services/AIService.js
 
-import fetch from 'node-fetch';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import DatabaseService from './DatabaseService.js';
 
 export default class AIService {
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY;
-    this.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
-    this.model = 'gemini-2.0-flash'; // Default model
+    this.modelName = 'gemini-pro'; // Default model
     
     if (!this.apiKey) {
-      console.error('Gemini API key not configured in .env');
-    } else {
-      console.debug('Gemini API key detected');
+      throw new Error('Gemini API key not configured in .env');
     }
+    
+    this.genAI = new GoogleGenerativeAI(this.apiKey);
+    this.model = this.genAI.getGenerativeModel({ model: this.modelName });
+    console.log('Gemini AI client initialized');
     
     // Standard service codes by country
     this.standardServicesByCountry = {
@@ -149,80 +150,21 @@ export default class AIService {
    */
   async getAIRecommendation(costSavingOptions, standardService, shipmentData) {
     try {
-      if (!this.apiKey) {
-        throw new Error('Gemini API key not configured');
-      }
-
-      // Prepare context for the AI
       const context = this.prepareContext(costSavingOptions, standardService, shipmentData);
       
-      const requestBody = {
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a shipping logistics expert focused on cost savings. Your task is to recommend the most cost-effective UPS shipping service that does not compromise delivery time significantly. The goal is to save money while ensuring delivery is not delayed by more than 1 day compared to the standard service. Consider factors like cost, delivery time, reliability, and specific shipment requirements. Provide your recommendation with a brief explanation.'
-          },
-          {
-            role: 'user',
-            content: context
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 10000
-      };
+      const prompt = `You are a shipping logistics expert focused on cost savings. Your task is to recommend the most cost-effective UPS shipping service that does not compromise delivery time significantly. The goal is to save money while ensuring delivery is not delayed by more than 1 day compared to the standard service. Consider factors like cost, delivery time, reliability, and specific shipment requirements. Provide your recommendation with a brief explanation.
 
-      console.debug('Request body:', JSON.stringify(requestBody));
+${context}`;
 
-      console.debug('Sending AI recommendation request:', {
-        model: this.model,
-        contextLength: context.length,
-        optionsCount: costSavingOptions.length
-      });
-
-      console.debug('Using API key prefix:', this.apiKey?.slice(0, 8) + '...');
+      console.debug('Sending request to Gemini API');
       
-      // Make request to Gemini API
-      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: requestBody.messages,
-          generationConfig: {
-            temperature: requestBody.temperature,
-            maxOutputTokens: requestBody.max_tokens
-          }
-        })
-      });
-      console.log('Response------------AI:', JSON.stringify(response));
-
-      const responseText = await response.text();
-      if (!response.ok) {
-        console.error('OpenRouter API error:', {
-          status: response.status,
-          response: responseText,
-          request: requestBody
-        });
-        throw new Error(`AI service error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.debug('Gemini API successful response:', {
-        model: this.model,
-        usage: data.usageMetadata,
-        responseLength: data.candidates?.[0]?.content?.parts?.[0]?.text?.length
-      });
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
       
-      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-        throw new Error('Invalid response format from Gemini API');
-      }
+      console.debug('Gemini API response:', text);
       
-      const aiResponse = data.candidates[0].content.parts[0].text;
-      
-      // Parse AI response to extract recommendation
-      return this.parseAIResponse(aiResponse, costSavingOptions, standardService, shipmentData);
+      return this.parseAIResponse(text, costSavingOptions, standardService, shipmentData);
     } catch (error) {
       console.error('Error getting AI recommendation:', error);
       throw error;
