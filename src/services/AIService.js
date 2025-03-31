@@ -5,14 +5,14 @@ import DatabaseService from './DatabaseService.js';
 
 class AIService {
   constructor() {
-    this.apiKey = process.env.OPENROUTER_API_KEY;
-    this.apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
-    this.model = 'deepseek/deepseek-chat-v3-0324'; // Default model
+    this.apiKey = process.env.GEMINI_API_KEY;
+    this.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+    this.model = 'gemini-pro'; // Default model
     
     if (!this.apiKey) {
-      console.error('OpenRouter API key not configured in .env');
+      console.error('Gemini API key not configured in .env');
     } else {
-      console.debug('OpenRouter API key detected');
+      console.debug('Gemini API key detected');
     }
     
     // Standard service codes by country
@@ -201,16 +201,19 @@ class AIService {
 
       console.debug('Using API key prefix:', this.apiKey?.slice(0, 8) + '...');
       
-      // Make request to OpenRouter API
-      const response = await fetch(this.apiUrl, {
+      // Make request to Gemini API
+      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://shipping-management-app.com',
-          'X-Title': 'Shipping Management System'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({
+          contents: requestBody.messages,
+          generationConfig: {
+            temperature: requestBody.temperature,
+            maxOutputTokens: requestBody.max_tokens
+          }
+        })
       });
       console.log('Response------------AI:', JSON.stringify(response));
 
@@ -224,18 +227,18 @@ class AIService {
         throw new Error(`AI service error: ${response.status} ${response.statusText}`);
       }
 
-      const data = JSON.parse(responseText);
-      console.debug('OpenRouter API successful response:', {
-        model: data.model,
-        usage: data.usage,
-        responseLength: data.choices?.[0]?.message?.content?.length
+      const data = await response.json();
+      console.debug('Gemini API successful response:', {
+        model: this.model,
+        usage: data.usageMetadata,
+        responseLength: data.candidates?.[0]?.content?.parts?.[0]?.text?.length
       });
       
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new Error('Invalid response format from OpenRouter API');
+      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+        throw new Error('Invalid response format from Gemini API');
       }
       
-      const aiResponse = data.choices[0].message.content;
+      const aiResponse = data.candidates[0].content.parts[0].text;
       
       // Parse AI response to extract recommendation
       return this.parseAIResponse(aiResponse, costSavingOptions, standardService, shipmentData);
