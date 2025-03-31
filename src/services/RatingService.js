@@ -108,6 +108,7 @@ class RatingService {
       };
 
       // Make the request to UPS API
+      console.log("BODY--------------", body)
       const response = await fetch(url, {
         method: 'POST',
         headers: {
