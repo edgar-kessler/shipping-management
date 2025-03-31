@@ -3,7 +3,7 @@
 import fetch from 'node-fetch';
 import DatabaseService from './DatabaseService.js';
 
-export class AIService {
+export default class AIService {
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY;
     this.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
@@ -612,4 +612,3 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
   }
 }
 
-// Remove this line as we'll create new instances where needed

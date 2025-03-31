@@ -4,6 +4,7 @@ import DatabaseService from '../services/DatabaseService.js';
 import UploadDocumentService from '../services/UploadDocumentService.js';
 import RatingService from '../services/RatingService.js';
 import AIService from '../services/AIService.js';
+console.log('AIService import path:', new URL('../services/AIService.js', import.meta.url).pathname);
 import { v4 as uuidv4 } from 'uuid';
 import { getStateCodeByStateName } from 'us-state-codes';
 
