@@ -7,7 +7,7 @@ class AIService {
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY;
     this.apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
-    this.model = 'google/gemini-2.0-flash-001'; // Default model, can be changed
+    this.model = 'deepseek/deepseek-chat-v3-0324'; // Default model, can be changed
     
     // Standard service codes by country
     this.standardServicesByCountry = {
