@@ -4,6 +4,14 @@ import { DateTime } from 'luxon'; // Import Luxon
 
 class DatabaseService {
   constructor() {
+    // Standard service codes by country (matches AIService)
+    this.standardServicesByCountry = {
+      'DE': '11', // UPS Standard for Germany
+      'NL': '11', // UPS Standard for Netherlands
+      'BE': '11', // UPS Standard for Belgium
+      'default': '65' // UPS Express Saver for other countries
+    };
+
     // Initialize MySQL connection pool
     this.connection = mysql.createPool({
       host: '65.21.242.103',
