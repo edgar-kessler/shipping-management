@@ -191,13 +191,16 @@ class AIService {
         optionsCount: costSavingOptions.length
       });
 
+      console.debug('Using API key prefix:', this.apiKey?.slice(0, 8) + '...');
+      
       // Make request to OpenRouter API
       const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://shipping-management-app.com'
+          'HTTP-Referer': 'shipping-management-app.com', // Simplified referer
+          'X-Title': 'Shipping Management System'
         },
         body: JSON.stringify(requestBody)
       });
@@ -597,7 +600,17 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
           
       console.log(`Cost savings logged: ${logData.savings.amount} ${logData.savings.currency} (${logData.savings.percentage.toFixed(1)}%)${delayInfo}`);
     } catch (error) {
-      console.error('Error logging cost savings:', error);
+      console.error('Error logging cost savings:', {
+        error: error.message,
+        code: error.code,
+        table: 'cost_savings',
+        sql: error.sql
+      });
+      
+      // Check if it's a missing column error
+      if (error.code === 'ER_BAD_FIELD_ERROR') {
+        console.error('Database schema may need updating - missing columns detected');
+      }
       // Don't throw error to ensure the API still returns the response
     }
   }

@@ -86,6 +86,7 @@ class DatabaseService {
         id INT AUTO_INCREMENT PRIMARY KEY,
         country_code VARCHAR(2),
         standard_service_code VARCHAR(10),
+        standard_transit_days INT DEFAULT 0,
         standard_service_name VARCHAR(50),
         standard_service_cost DECIMAL(10,2),
         standard_transit_days INT,
