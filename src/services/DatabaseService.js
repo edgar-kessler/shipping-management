@@ -209,10 +209,6 @@ class DatabaseService {
             COUNT(*) as shipment_count,
             SUM(savings_amount) as total_savings,
             AVG(savings_percentage) as avg_savings_percentage,
-            AVG(transit_days_difference) as avg_transit_days_difference,
-            COUNT(CASE WHEN transit_days_difference > 0 THEN 1 END) as delayed_shipments,
-            COUNT(CASE WHEN transit_days_difference = 0 THEN 1 END) as same_time_shipments,
-            COUNT(CASE WHEN transit_days_difference < 0 THEN 1 END) as faster_shipments,
             currency
           FROM cost_savings
           GROUP BY country_code, currency
@@ -226,7 +222,6 @@ class DatabaseService {
             COUNT(*) as usage_count,
             SUM(savings_amount) as total_savings,
             AVG(savings_percentage) as avg_savings_percentage,
-            AVG(transit_days_difference) as avg_transit_days_difference,
             currency
           FROM cost_savings
           GROUP BY selected_service_name, currency
@@ -239,10 +234,6 @@ class DatabaseService {
             COUNT(*) as total_shipments,
             SUM(savings_amount) as total_savings,
             AVG(savings_percentage) as avg_savings_percentage,
-            AVG(transit_days_difference) as avg_transit_days_difference,
-            COUNT(CASE WHEN transit_days_difference > 0 THEN 1 END) as delayed_shipments,
-            COUNT(CASE WHEN transit_days_difference = 0 THEN 1 END) as same_time_shipments,
-            COUNT(CASE WHEN transit_days_difference < 0 THEN 1 END) as faster_shipments,
             currency
           FROM cost_savings
           GROUP BY currency
@@ -251,14 +242,14 @@ class DatabaseService {
         // Get transit days impact summary
         const [transitDaysSummary] = await db.query(`
           SELECT
-            transit_days_difference,
+            selected_service_name as service,
             COUNT(*) as shipment_count,
             SUM(savings_amount) as total_savings,
             AVG(savings_percentage) as avg_savings_percentage,
             currency
           FROM cost_savings
-          GROUP BY transit_days_difference, currency
-          ORDER BY transit_days_difference
+          GROUP BY selected_service_name, currency
+          ORDER BY total_savings DESC
         `);
         
         return {
