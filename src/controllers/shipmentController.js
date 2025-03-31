@@ -209,12 +209,31 @@ class ShipmentController {
       }
 
       if (!response.ok) {
+        // Extract validation errors if present
+        const validationErrors = parsedData?.response?.errors?.map(err => ({
+          code: err.code,
+          message: err.message,
+          context: err.context
+        })) || [];
+        
+        const error = new Error(
+          validationErrors.length
+            ? `UPS Validation Errors: ${validationErrors.map(e => e.message).join(', ')}`
+            : `UPS API Error: ${response.status} ${response.statusText}`
+        );
+        
+        error.statusCode = response.status;
+        error.upsError = parsedData;
+        error.validationErrors = validationErrors;
+        
         console.error('UPS Shipment API Error:', {
           status: response.status,
           statusText: response.statusText,
-          details: parsedData
+          requestBody: requestBody, // Log the sent request for debugging
+          errors: validationErrors.length ? validationErrors : parsedData
         });
-        throw new Error(`UPS API Error: ${response.status} ${response.statusText}`);
+        
+        throw error;
       }
 
       return {
