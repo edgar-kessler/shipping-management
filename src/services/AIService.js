@@ -7,14 +7,19 @@ class AIService {
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY;
     this.apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
-    this.model = 'deepseek/deepseek-chat-v3-0324'; // Default model, can be changed
+    this.model = 'deepseek/deepseek-chat-v3-0324'; // Default model
+    
+    if (!this.apiKey) {
+      console.error('OpenRouter API key not configured in .env');
+    } else {
+      console.debug('OpenRouter API key detected');
+    }
     
     // Standard service codes by country
     this.standardServicesByCountry = {
       'DE': '11', // UPS Standard for Germany
       'NL': '11', // UPS Standard for Netherlands
       'BE': '11', // UPS Standard for Belgium
-      'ES': '11', // UPS Standard for Spain
       'default': '65' // UPS Express Saver for other countries
     };
   }
@@ -107,6 +112,7 @@ class AIService {
    * @returns {Object} - Selected service with explanation
    */
   selectBestCostSavingOption(costSavingOptions, standardService, shipmentData) {
+    console.debug('MANUUELLL', JSON.stringify(costSavingOptions, null, 2));
     // Sort by cost (cheapest first)
     costSavingOptions.sort((a, b) => 
       parseFloat(a.charge.amount) - parseFloat(b.charge.amount)
@@ -201,7 +207,7 @@ class AIService {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'shipping-management-app.com', // Simplified referer
+          'HTTP-Referer': 'https://shipping-management-app.com',
           'X-Title': 'Shipping Management System'
         },
         body: JSON.stringify(requestBody)
