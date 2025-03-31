@@ -236,17 +236,25 @@ class ShipmentController {
   async handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId) {
     const { data, statusCode } = response;
 
-    if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
-      // Throw an error with the full UPS response for debugging
-      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
+    if (!data?.ShipmentResponse) {
+      throw new Error(`Invalid UPS API response: ${JSON.stringify(data)}`);
     }
 
-    const shipmentResults = data.ShipmentResponse?.ShipmentResults;
-    const trackingNumber = shipmentResults?.ShipmentIdentificationNumber;
-    const packageResults = shipmentResults?.PackageResults;
+    const responseStatus = data.ShipmentResponse?.Response?.ResponseStatus;
+    if (!responseStatus || responseStatus.Code !== '1') {
+      throw new Error(`UPS API Error: ${responseStatus?.Description || 'Unknown error'}`);
+    }
+
+    const shipmentResults = data.ShipmentResponse.ShipmentResults;
+    if (!shipmentResults) {
+      throw new Error('Invalid shipment results in UPS response');
+    }
+
+    const trackingNumber = shipmentResults.ShipmentIdentificationNumber;
+    const packageResults = shipmentResults.PackageResults;
     const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
     const internationalSignatureGraphicImage = packageResults?.ShippingLabel?.InternationalSignatureGraphicImage;
-    const shipmentCharges = JSON.stringify(shipmentResults?.NegotiatedRateCharges);
+    const shipmentCharges = JSON.stringify(shipmentResults.NegotiatedRateCharges);
 
     if (!zplBase64 || !trackingNumber) {
       throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
@@ -254,12 +262,12 @@ class ShipmentController {
 
     await DatabaseService.saveShipment({
       ID: uuidv4(),
-        Referenz: shipmentData.OrderNr,
-        ShipTo: JSON.stringify(shipmentData.Receiver),
+      Referenz: shipmentData.OrderNr,
+      ShipTo: JSON.stringify(shipmentData.Receiver),
       Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(serviceCode) }),
-        Document_record_id: documentRecordId,
+      Document_record_id: documentRecordId,
       StatusCode: statusCode,
-        TransactionIdentifier: transId,
+      TransactionIdentifier: transId,
       ShipmentCharges: shipmentCharges,
       TrackingNr: trackingNumber,
       GraphicImage: zplBase64,
