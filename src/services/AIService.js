@@ -352,32 +352,12 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
    */
   async testConnection() {
     try {
-      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            role: 'user',
-            parts: [{text: 'Respond with just "OK" to confirm the API is working'}]
-          }],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 2
-          }
-        })
-      });
-
-      const data = await response.json();
-      console.debug('API test response:', JSON.stringify(data, null, 2));
+      const prompt = 'Respond with just "OK" to confirm the API is working';
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
       
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-      
-      if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        throw new Error('API returned unexpected response format');
+      if (!response.text()) {
+        throw new Error('API returned empty response');
       }
       
       return true;
@@ -402,38 +382,15 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
       const errorMessage = typeof error === 'string' ? error : error.message;
       const errorStack = typeof error === 'string' ? '' : error.stack;
       
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          'HTTP-Referer': 'https://shipping-management-app.com'
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [
-            {
-              role: 'system',
-              content: 'Du bist ein technischer Übersetzer. Übersetze die Fehlermeldung ins Deutsche und fasse sie kurz zusammen. Halte es technisch präzise aber verständlich. Format: "Zusammenfassung: [kurze Ursache] Lösung: [empfohlene Aktion]"'
-            },
-            {
-              role: 'user',
-              content: `Original error: ${errorMessage}\n\nStack: ${errorStack}\n\nContext: ${JSON.stringify(context)}`
-            }
-          ],
-          temperature: 0.1, // Low temperature for accurate translations
-          max_tokens: 2000
-        })
-      });
+      const prompt = `Du bist ein technischer Übersetzer. Übersetze die Fehlermeldung ins Deutsche und fasse sie kurz zusammen. Halte es technisch präzise aber verständlich. Format: "Zusammenfassung: [kurze Ursache] Lösung: [empfohlene Aktion]"
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('OpenRouter API error:', errorText);
-        return `Fehlerübersetzung fehlgeschlagen. Original: ${errorMessage}`;
-      }
-
-      const data = await response.json();
-      return data.choices[0]?.message?.content || `Übersetzungsfehler. Original: ${errorMessage}`;
+Original error: ${errorMessage}
+Stack: ${errorStack}
+Context: ${JSON.stringify(context)}`;
+      
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text() || `Übersetzungsfehler. Original: ${errorMessage}`;
     } catch (err) {
       console.error('Error in translateError:', err);
       return `Fehler bei der Übersetzung. Original: ${typeof error === 'string' ? error : error.message}`;
