@@ -159,11 +159,12 @@ class DatabaseService {
       const db = await this.getDb();
       await db.query(query, params);
 
-      // Also save to summary table
+      // Also save to summary and cost_savings tables
       const serviceData = JSON.parse(Service);
       const chargesData = JSON.parse(ShipmentCharges);
       const shipToData = JSON.parse(ShipTo);
 
+      // Save to shipment_summary
       await db.query(`
         INSERT INTO shipment_summary (
           shipment_reference,
@@ -182,6 +183,47 @@ class DatabaseService {
           chargesData.TotalCharges?.CurrencyCode || 'EUR'
         ]
       );
+
+      // Save to cost_savings if this is not the standard service
+      const standardServiceCode = this.standardServicesByCountry[shipToData.CountryCode] || this.standardServicesByCountry.default;
+      if (serviceData.Code !== standardServiceCode) {
+        const standardService = await this.getStandardService(shipToData.CountryCode);
+        if (standardService) {
+          const savingsAmount = parseFloat(standardService.charge.amount) - parseFloat(chargesData.TotalCharges?.MonetaryValue || '0');
+          const savingsPercentage = (savingsAmount / parseFloat(standardService.charge.amount)) * 100;
+
+          await db.query(`
+            INSERT INTO cost_savings (
+              country_code,
+              standard_service_code,
+              standard_service_name,
+              standard_service_cost,
+              selected_service_code,
+              selected_service_name,
+              selected_service_cost,
+              savings_amount,
+              savings_percentage,
+              currency,
+              shipment_reference,
+              ai_recommended
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              shipToData.CountryCode,
+              standardService.serviceCode,
+              standardService.serviceName,
+              standardService.charge.amount,
+              serviceData.Code,
+              serviceData.Description,
+              chargesData.TotalCharges?.MonetaryValue || '0',
+              savingsAmount,
+              savingsPercentage,
+              chargesData.TotalCharges?.CurrencyCode || 'EUR',
+              Referenz,
+              0 // Not AI recommended
+            ]
+          );
+        }
+      }
     } catch (error) {
       console.error('Error saving shipment:', error);
       throw error;
@@ -212,6 +254,18 @@ class DatabaseService {
       console.error('Error saving shipment log:', error);
       throw error;
     }
+  }
+
+  async getStandardService(countryCode) {
+    const db = await this.getDb();
+    const [rows] = await db.query(
+      `SELECT * FROM shipment_summary
+       WHERE country_code = ?
+       AND service_code = ?
+       ORDER BY created_at DESC LIMIT 1`,
+      [countryCode, this.standardServicesByCountry[countryCode] || this.standardServicesByCountry.default]
+    );
+    return rows[0] || null;
   }
 
   async getCostSavingsSummary() {
