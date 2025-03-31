@@ -6,7 +6,7 @@ import DatabaseService from './DatabaseService.js';
 export default class AIService {
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY;
-    this.modelName = 'gemini-pro'; // Default model
+    this.modelName = 'gemini-2.0-flash'; // Default model
     
     if (!this.apiKey) {
       throw new Error('Gemini API key not configured in .env');
