@@ -144,7 +144,7 @@ class RatingService {
           details: upsError
         });
         
-        throw error;
+        throw JSON.stringify(upsError);
       }
 
       const data = await response.json();
