@@ -185,6 +185,8 @@ class AIService {
         max_tokens: 10000
       };
 
+      console.debug('Request body:', JSON.stringify(requestBody));
+
       console.debug('Sending AI recommendation request:', {
         model: this.model,
         contextLength: context.length,
