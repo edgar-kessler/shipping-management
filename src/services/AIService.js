@@ -31,50 +31,33 @@ class AIService {
    * @returns {Promise<Object>} - Recommended service with explanation
    */
   async getServiceRecommendation(serviceOptions, shipmentData) {
-    try {
-      if (!serviceOptions || serviceOptions.length === 0) {
-        throw new Error('No service options available');
-      }
-      
-      // Get the standard service code for this country
-      const countryCode = shipmentData.Receiver.Country;
-      const standardServiceCode = this.standardServicesByCountry[countryCode] || this.standardServicesByCountry.default;
-      
-      // Find the standard service in the options
-      const standardService = serviceOptions.find(service => service.serviceCode === standardServiceCode);
-      
-      if (!standardService) {
-        console.warn(`Standard service (${standardServiceCode}) not found in options. Using fallback.`);
-        return this.fallbackServiceSelection(serviceOptions, countryCode);
-      }
-      
-      // Find cheaper alternatives with acceptable delivery times
-      const costSavingOptions = this.findCostSavingOptions(serviceOptions, standardService);
-      
-      // If we have cost-saving options, use AI to evaluate them if API key is available
-      if (costSavingOptions.length > 0 && this.apiKey) {
-        return await this.getAIRecommendation(costSavingOptions, standardService, shipmentData);
-      } else if (costSavingOptions.length > 0) {
-        // If no API key, use our own logic
-        return this.selectBestCostSavingOption(costSavingOptions, standardService, shipmentData);
-      } else {
-        // No cost-saving options found, use standard service
-        return {
-          recommendedService: standardService,
-          reason: 'Using standard service as no cost-saving alternatives were found.',
-          allOptions: serviceOptions,
-          costSaving: {
-            amount: 0,
-            currency: standardService.charge.currency,
-            percentage: 0
-          },
-          standardService
-        };
-      }
-    } catch (error) {
-      console.error('Error in service recommendation:', error);
-      return this.fallbackServiceSelection(serviceOptions, shipmentData.Receiver.Country);
+    if (!serviceOptions || serviceOptions.length === 0) {
+      throw new Error('No service options available');
     }
+    
+    if (!this.apiKey) {
+      throw new Error('Gemini API key not configured');
+    }
+
+    // Get the standard service code for this country
+    const countryCode = shipmentData.Receiver.Country;
+    const standardServiceCode = this.standardServicesByCountry[countryCode] || this.standardServicesByCountry.default;
+    
+    // Find the standard service in the options
+    const standardService = serviceOptions.find(service => service.serviceCode === standardServiceCode);
+    
+    if (!standardService) {
+      throw new Error(`Standard service (${standardServiceCode}) not found in options`);
+    }
+    
+    // Find cheaper alternatives with acceptable delivery times
+    const costSavingOptions = this.findCostSavingOptions(serviceOptions, standardService);
+    
+    if (costSavingOptions.length === 0) {
+      throw new Error('No cost-saving options found');
+    }
+
+    return await this.getAIRecommendation(costSavingOptions, standardService, shipmentData);
   }
 
   /**
@@ -166,10 +149,8 @@ class AIService {
    */
   async getAIRecommendation(costSavingOptions, standardService, shipmentData) {
     try {
-      // Validate API key format
-      if (!this.apiKey || !this.apiKey.startsWith('sk-or-v1-')) {
-        console.warn('Invalid or missing OpenRouter API key format');
-        throw new Error('AI service unavailable');
+      if (!this.apiKey) {
+        throw new Error('Gemini API key not configured');
       }
 
       // Prepare context for the AI
@@ -244,8 +225,7 @@ class AIService {
       return this.parseAIResponse(aiResponse, costSavingOptions, standardService, shipmentData);
     } catch (error) {
       console.error('Error getting AI recommendation:', error);
-      // Fall back to our own logic if AI fails
-      return this.selectBestCostSavingOption(costSavingOptions, standardService, shipmentData);
+      throw error;
     }
   }
 
@@ -418,7 +398,7 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
       };
     } catch (error) {
       console.error('Error parsing AI response:', error);
-      return this.selectBestCostSavingOption(costSavingOptions, standardService, shipmentData);
+      throw error;
     }
   }
 
@@ -428,46 +408,34 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
    * @param {string} countryCode - Destination country code
    * @returns {Object} - Selected service with explanation
    */
-  fallbackServiceSelection(serviceOptions, countryCode) {
-    if (!serviceOptions || serviceOptions.length === 0) {
-      throw new Error('No service options available');
-    }
-    
-    // Get the standard service code for this country
-    const standardServiceCode = this.standardServicesByCountry[countryCode] || this.standardServicesByCountry.default;
-    
-    // Find the standard service in the options
-    const standardService = serviceOptions.find(service => service.serviceCode === standardServiceCode);
-    
-    if (standardService) {
-      return {
-        recommendedService: standardService,
-        reason: 'Using standard service as fallback.',
-        allOptions: serviceOptions,
-        costSaving: {
-          amount: 0,
-          currency: standardService.charge.currency,
-          percentage: 0
+  async testConnection() {
+    try {
+      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        standardService
-      };
-    }
-    
-    // If standard service not found, use the cheapest option
-    const cheapestOption = serviceOptions.sort((a, b) => 
-      parseFloat(a.charge.amount) - parseFloat(b.charge.amount)
-    )[0];
-    
-    return {
-      recommendedService: cheapestOption,
-      reason: 'Using cheapest service as standard service not found.',
-      allOptions: serviceOptions,
-      costSaving: {
-        amount: 0,
-        currency: cheapestOption.charge.currency,
-        percentage: 0
+        body: JSON.stringify({
+          contents: [{
+            role: 'user',
+            parts: [{text: 'Respond with just "OK" to confirm the API is working'}]
+          }],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 2
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.candidates?.[0]?.content?.parts?.[0]?.text?.includes('OK')) {
+        throw new Error('API test failed');
       }
-    };
+      return true;
+    } catch (error) {
+      console.error('AI API test failed:', error);
+      throw error;
+    }
   }
 
   /**
