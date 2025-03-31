@@ -177,74 +177,155 @@ class DatabaseService {
     try {
       const db = await this.getDb();
       
-      // Get total savings by country
-      const [countrySummary] = await db.query(`
-        SELECT 
-          country_code, 
-          COUNT(*) as shipment_count,
-          SUM(savings_amount) as total_savings,
-          AVG(savings_percentage) as avg_savings_percentage,
-          AVG(transit_days_difference) as avg_transit_days_difference,
-          COUNT(CASE WHEN transit_days_difference > 0 THEN 1 END) as delayed_shipments,
-          COUNT(CASE WHEN transit_days_difference = 0 THEN 1 END) as same_time_shipments,
-          COUNT(CASE WHEN transit_days_difference < 0 THEN 1 END) as faster_shipments,
-          currency
-        FROM cost_savings
-        GROUP BY country_code, currency
-        ORDER BY total_savings DESC
+      // First verify the cost_savings table exists
+      const [tables] = await db.query(`
+        SHOW TABLES LIKE 'cost_savings'
       `);
       
-      // Get total savings by service
-      const [serviceSummary] = await db.query(`
-        SELECT 
-          selected_service_name,
-          COUNT(*) as usage_count,
-          SUM(savings_amount) as total_savings,
-          AVG(savings_percentage) as avg_savings_percentage,
-          AVG(transit_days_difference) as avg_transit_days_difference,
-          currency
-        FROM cost_savings
-        GROUP BY selected_service_name, currency
-        ORDER BY total_savings DESC
+      if (tables.length === 0) {
+        return {
+          error: 'cost_savings table does not exist',
+          tables: await this.listTables()
+        };
+      }
+
+      // Check if table has any data
+      const [rowCount] = await db.query(`
+        SELECT COUNT(*) as count FROM cost_savings
       `);
       
-      // Get overall total
-      const [overallSummary] = await db.query(`
-        SELECT 
-          COUNT(*) as total_shipments,
-          SUM(savings_amount) as total_savings,
-          AVG(savings_percentage) as avg_savings_percentage,
-          AVG(transit_days_difference) as avg_transit_days_difference,
-          COUNT(CASE WHEN transit_days_difference > 0 THEN 1 END) as delayed_shipments,
-          COUNT(CASE WHEN transit_days_difference = 0 THEN 1 END) as same_time_shipments,
-          COUNT(CASE WHEN transit_days_difference < 0 THEN 1 END) as faster_shipments,
-          currency
-        FROM cost_savings
-        GROUP BY currency
-      `);
-      
-      // Get transit days impact summary
-      const [transitDaysSummary] = await db.query(`
-        SELECT 
-          transit_days_difference,
-          COUNT(*) as shipment_count,
-          SUM(savings_amount) as total_savings,
-          AVG(savings_percentage) as avg_savings_percentage,
-          currency
-        FROM cost_savings
-        GROUP BY transit_days_difference, currency
-        ORDER BY transit_days_difference
-      `);
-      
-      return {
-        byCountry: countrySummary,
-        byService: serviceSummary,
-        byTransitDays: transitDaysSummary,
-        overall: overallSummary
-      };
+      if (rowCount[0].count === 0) {
+        return {
+          message: 'No cost savings data available',
+          tableStructure: await this.getTableStructure('cost_savings')
+        };
+      }
+
+      try {
+        // Get total savings by country
+        const [countrySummary] = await db.query(`
+          SELECT
+            country_code,
+            COUNT(*) as shipment_count,
+            SUM(savings_amount) as total_savings,
+            AVG(savings_percentage) as avg_savings_percentage,
+            AVG(transit_days_difference) as avg_transit_days_difference,
+            COUNT(CASE WHEN transit_days_difference > 0 THEN 1 END) as delayed_shipments,
+            COUNT(CASE WHEN transit_days_difference = 0 THEN 1 END) as same_time_shipments,
+            COUNT(CASE WHEN transit_days_difference < 0 THEN 1 END) as faster_shipments,
+            currency
+          FROM cost_savings
+          GROUP BY country_code, currency
+          ORDER BY total_savings DESC
+        `);
+        
+        // Get total savings by service
+        const [serviceSummary] = await db.query(`
+          SELECT
+            selected_service_name,
+            COUNT(*) as usage_count,
+            SUM(savings_amount) as total_savings,
+            AVG(savings_percentage) as avg_savings_percentage,
+            AVG(transit_days_difference) as avg_transit_days_difference,
+            currency
+          FROM cost_savings
+          GROUP BY selected_service_name, currency
+          ORDER BY total_savings DESC
+        `);
+        
+        // Get overall total
+        const [overallSummary] = await db.query(`
+          SELECT
+            COUNT(*) as total_shipments,
+            SUM(savings_amount) as total_savings,
+            AVG(savings_percentage) as avg_savings_percentage,
+            AVG(transit_days_difference) as avg_transit_days_difference,
+            COUNT(CASE WHEN transit_days_difference > 0 THEN 1 END) as delayed_shipments,
+            COUNT(CASE WHEN transit_days_difference = 0 THEN 1 END) as same_time_shipments,
+            COUNT(CASE WHEN transit_days_difference < 0 THEN 1 END) as faster_shipments,
+            currency
+          FROM cost_savings
+          GROUP BY currency
+        `);
+        
+        // Get transit days impact summary
+        const [transitDaysSummary] = await db.query(`
+          SELECT
+            transit_days_difference,
+            COUNT(*) as shipment_count,
+            SUM(savings_amount) as total_savings,
+            AVG(savings_percentage) as avg_savings_percentage,
+            currency
+          FROM cost_savings
+          GROUP BY transit_days_difference, currency
+          ORDER BY transit_days_difference
+        `);
+        
+        return {
+          byCountry: countrySummary,
+          byService: serviceSummary,
+          byTransitDays: transitDaysSummary,
+          overall: overallSummary,
+          totalRecords: rowCount[0].count
+        };
+      } catch (queryError) {
+        console.error('Query error in getCostSavingsSummary:', {
+          error: queryError,
+          sql: queryError.sql,
+          parameters: queryError.parameters
+        });
+        return {
+          error: 'Failed to execute cost savings queries',
+          queryError: queryError.message,
+          tableStructure: await this.getTableStructure('cost_savings')
+        };
+      }
     } catch (error) {
-      console.error('Error getting cost savings summary:', error);
+      console.error('Database error in getCostSavingsSummary:', {
+        error: error.message,
+        stack: error.stack,
+        connection: await this.checkConnection()
+      });
       throw error;
+    }
+  }
+
+  async listTables() {
+    try {
+      const db = await this.getDb();
+      const [tables] = await db.query('SHOW TABLES');
+      return tables.map(table => table[`Tables_in_${this.connection.config.database}`]);
+    } catch (error) {
+      console.error('Error listing tables:', error);
+      throw error;
+    }
+  }
+
+  async getTableStructure(tableName) {
+    try {
+      const db = await this.getDb();
+      const [structure] = await db.query(`DESCRIBE ${tableName}`);
+      return structure;
+    } catch (error) {
+      console.error(`Error getting structure for table ${tableName}:`, error);
+      return { error: `Could not describe table ${tableName}` };
+    }
+  }
+
+  async checkConnection() {
+    try {
+      const db = await this.getDb();
+      await db.query('SELECT 1');
+      return { status: 'connected', database: this.connection.config.database };
+    } catch (error) {
+      return {
+        status: 'disconnected',
+        error: error.message,
+        config: {
+          host: this.connection.config.host,
+          database: this.connection.config.database
+        }
+      };
     }
   }
 
