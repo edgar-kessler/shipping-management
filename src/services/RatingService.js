@@ -135,7 +135,7 @@ class RatingService {
         // Create a custom error object with UPS error details
         const error = new Error(`UPS API Error: ${response.status} ${response.statusText}`);
         error.statusCode = response.status;
-        error.upsError = upsError;
+        error.upsError = JSON.stringify(upsError);
         
         // Log the error for debugging
         console.error('UPS API Error:', {
