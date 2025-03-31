@@ -36,8 +36,8 @@ class ShipmentController {
     
     // Use AI to select the best service option
     console.log("Using AI to select the best service option...");
-    const aiRecommendation = await AIService.getServiceRecommendation(rateOptions, shipmentData);
-    console.log("AI Recommendation:", aiRecommendation);    
+    const aiRecommendation = await aiService.getServiceRecommendation(rateOptions, shipmentData);
+    console.log("AI Recommendation:", aiRecommendation);
     // Use the recommended service code or fall back to default
     const serviceCode = aiRecommendation.recommendedService?.serviceCode || this.getServiceCode(shipmentData.Country);
     console.log(`Selected service: ${aiRecommendation.recommendedService?.serviceName} (${serviceCode})`);
