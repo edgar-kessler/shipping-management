@@ -199,88 +199,101 @@ class ShipmentController {
         body: JSON.stringify(requestBody)
       });
 
+      const responseData = await response.text();
+      let parsedData;
+      
+      try {
+        parsedData = JSON.parse(responseData);
+      } catch (e) {
+        throw new Error(`Invalid JSON response: ${responseData}`);
+      }
+
       if (!response.ok) {
-        const errorText = await response.text();
-        let upsError = null;
-        
-        try {
-          // Try to parse the error response as JSON
-          upsError = JSON.parse(errorText);
-        } catch (e) {
-          // If not valid JSON, use the raw text
-          upsError = { rawError: errorText };
-        }
-        
-        // Create a custom error object with UPS error details
-        const error = new Error(`UPS API Error: ${response.status} ${response.statusText}`);
-        error.statusCode = response.status;
-        error.upsError = upsError;
-        
-        // Log the error for debugging
         console.error('UPS Shipment API Error:', {
           status: response.status,
           statusText: response.statusText,
-          details: upsError
+          details: parsedData
         });
-        
-        throw error;
+        throw new Error(`UPS API Error: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      return {
+        data: parsedData,
+        statusCode: response.status
+      };
     } catch (error) {
-      console.error('Error sending shipment request:', error);
+      console.error('Error sending shipment request:', {
+        error: error.message,
+        stack: error.stack
+      });
       throw error;
     }
   }
 
   async handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId) {
-    const { data, statusCode } = response;
+    try {
+      const { data, statusCode } = response;
 
-    if (!data?.ShipmentResponse) {
-      throw new Error(`Invalid UPS API response: ${JSON.stringify(data)}`);
+      if (!data || typeof data !== 'object') {
+        throw new Error(`Invalid UPS API response format: ${JSON.stringify(response)}`);
+      }
+
+      // Check for error response first
+      if (data.response?.errors) {
+        throw new Error(`UPS API Error: ${data.response.errors[0]?.message || 'Unknown error'}`);
+      }
+
+      if (!data.ShipmentResponse) {
+        throw new Error(`Missing ShipmentResponse in UPS API response: ${JSON.stringify(data)}`);
+      }
+
+      const responseStatus = data.ShipmentResponse.Response?.ResponseStatus;
+      if (!responseStatus || responseStatus.Code !== '1') {
+        throw new Error(`UPS API Error: ${responseStatus?.Description || 'Unknown error'}`);
+      }
+
+      const shipmentResults = data.ShipmentResponse.ShipmentResults;
+      if (!shipmentResults) {
+        throw new Error('Missing ShipmentResults in UPS response');
+      }
+
+      const trackingNumber = shipmentResults.ShipmentIdentificationNumber;
+      const packageResults = shipmentResults.PackageResults;
+      const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
+
+      if (!zplBase64 || !trackingNumber) {
+        throw new Error('Missing required shipment data: Label or Tracking number');
+      }
+
+      await DatabaseService.saveShipment({
+        ID: uuidv4(),
+        Referenz: shipmentData.OrderNr,
+        ShipTo: JSON.stringify(shipmentData.Receiver),
+        Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(serviceCode) }),
+        Document_record_id: documentRecordId,
+        StatusCode: statusCode,
+        TransactionIdentifier: transId,
+        ShipmentCharges: JSON.stringify(shipmentResults.NegotiatedRateCharges),
+        TrackingNr: trackingNumber,
+        GraphicImage: zplBase64,
+        InternationalSignatureGraphicImage: packageResults?.ShippingLabel?.InternationalSignatureGraphicImage,
+        Benutzer: 'Test-User'
+      });
+
+      return {
+        ZPLBase64: zplBase64,
+        TrackingNumber: trackingNumber,
+        DeliveryNoteNr: shipmentData.DeliveryNoteNr,
+        Service: this.getServiceDescription(serviceCode)
+      };
+    } catch (error) {
+      console.error('Error handling shipment response:', {
+        error: error.message,
+        shipmentData: shipmentData.OrderNr,
+        stack: error.stack
+      });
+      throw error;
     }
-
-    const responseStatus = data.ShipmentResponse?.Response?.ResponseStatus;
-    if (!responseStatus || responseStatus.Code !== '1') {
-      throw new Error(`UPS API Error: ${responseStatus?.Description || 'Unknown error'}`);
-    }
-
-    const shipmentResults = data.ShipmentResponse.ShipmentResults;
-    if (!shipmentResults) {
-      throw new Error('Invalid shipment results in UPS response');
-    }
-
-    const trackingNumber = shipmentResults.ShipmentIdentificationNumber;
-    const packageResults = shipmentResults.PackageResults;
-    const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
-    const internationalSignatureGraphicImage = packageResults?.ShippingLabel?.InternationalSignatureGraphicImage;
-    const shipmentCharges = JSON.stringify(shipmentResults.NegotiatedRateCharges);
-
-    if (!zplBase64 || !trackingNumber) {
-      throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
-    }
-
-    await DatabaseService.saveShipment({
-      ID: uuidv4(),
-      Referenz: shipmentData.OrderNr,
-      ShipTo: JSON.stringify(shipmentData.Receiver),
-      Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(serviceCode) }),
-      Document_record_id: documentRecordId,
-      StatusCode: statusCode,
-      TransactionIdentifier: transId,
-      ShipmentCharges: shipmentCharges,
-      TrackingNr: trackingNumber,
-      GraphicImage: zplBase64,
-      InternationalSignatureGraphicImage: internationalSignatureGraphicImage,
-      Benutzer: 'Test-User'
-    });
-
-    return {
-      ZPLBase64: zplBase64,
-      TrackingNumber: trackingNumber,
-      DeliveryNoteNr: shipmentData.DeliveryNoteNr,
-      Service: this.getServiceDescription(serviceCode)
-    };
   }
 
   debugLog(title, details) {
