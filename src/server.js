@@ -31,6 +31,7 @@ async function main() {
 }
 
 app.listen(port, () => {
+  console.log('Starting server... 1');
     console.log(`Server läuft auf http://localhost:${port}`);
     main();
 });

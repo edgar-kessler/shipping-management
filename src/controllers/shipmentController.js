@@ -234,52 +234,45 @@ class ShipmentController {
   }
 
   async handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId) {
-    try {
-      // Log the shipment response
-      this.debugLog("Shipment Response", response);
-      
-      // Extract response data
-      const data = response;
-      
-      // Create a log entry
-      await DatabaseService.saveShipmentLog({
-        orderNr: shipmentData.OrderNr,
-        statusCode: 200,
-        message: `Shipment created successfully. Tracking number: ${data.ShipmentResponse?.ShipmentResults?.ShipmentIdentificationNumber || 'N/A'}`
-      });
+    const { data, statusCode } = response;
 
-      // Format the response data
-      const formattedResponse = {
-        ID: transId,
+    if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
+      // Throw an error with the full UPS response for debugging
+      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
+    }
+
+    const shipmentResults = data.ShipmentResponse?.ShipmentResults;
+    const trackingNumber = shipmentResults?.ShipmentIdentificationNumber;
+    const packageResults = shipmentResults?.PackageResults;
+    const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
+    const internationalSignatureGraphicImage = packageResults?.ShippingLabel?.InternationalSignatureGraphicImage;
+    const shipmentCharges = JSON.stringify(shipmentResults?.NegotiatedRateCharges);
+
+    if (!zplBase64 || !trackingNumber) {
+      throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
+    }
+
+    await DatabaseService.saveShipment({
+      ID: uuidv4(),
         Referenz: shipmentData.OrderNr,
         ShipTo: JSON.stringify(shipmentData.Receiver),
-        Service: JSON.stringify({ ServiceCode: serviceCode }),
+      Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(serviceCode) }),
         Document_record_id: documentRecordId,
-        StatusCode: 200,
+      StatusCode: statusCode,
         TransactionIdentifier: transId,
-        ShipmentCharges: JSON.stringify(data.ShipmentResponse?.ShipmentResults?.ShipmentCharges || {}),
-        TrackingNr: data.ShipmentResponse?.ShipmentResults?.ShipmentIdentificationNumber || '',
-        GraphicImage: data.ShipmentResponse?.ShipmentResults?.PackageResults?.[0]?.ShippingLabel?.GraphicImage || '',
-        InternationalSignatureGraphicImage: data.ShipmentResponse?.ShipmentResults?.Form?.GraphicImage || '',
-        Benutzer: 'System'
-      };
+      ShipmentCharges: shipmentCharges,
+      TrackingNr: trackingNumber,
+      GraphicImage: zplBase64,
+      InternationalSignatureGraphicImage: internationalSignatureGraphicImage,
+      Benutzer: 'Test-User'
+    });
 
-      // Save the shipment to the database
-      await DatabaseService.saveShipment(formattedResponse);
-
-      return formattedResponse;
-    } catch (error) {
-      console.error('Error handling shipment response:', error);
-      
-      // Log the error
-      await DatabaseService.saveShipmentLog({
-        orderNr: shipmentData.OrderNr,
-        statusCode: error.statusCode || 500,
-        message: `Error creating shipment: ${error.message}`
-      });
-      
-      throw error;
-    }
+    return {
+      ZPLBase64: zplBase64,
+      TrackingNumber: trackingNumber,
+      DeliveryNoteNr: shipmentData.DeliveryNoteNr,
+      Service: this.getServiceDescription(serviceCode)
+    };
   }
 
   debugLog(title, details) {
