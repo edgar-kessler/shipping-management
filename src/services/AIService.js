@@ -7,7 +7,7 @@ export default class AIService {
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY;
     this.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
-    this.model = 'gemini-pro'; // Default model
+    this.model = 'gemini-2.0-flash'; // Default model
     
     if (!this.apiKey) {
       console.error('Gemini API key not configured in .env');
