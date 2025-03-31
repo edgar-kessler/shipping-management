@@ -36,10 +36,25 @@ class ShipmentController {
     
     // Use AI to select the best service option
     console.log("Using AI to select the best service option...");
-    const aiRecommendation = await aiService.getServiceRecommendation(rateOptions, shipmentData);
-    console.log("AI Recommendation:", aiRecommendation);
-    // Use the recommended service code or fall back to default
-    const serviceCode = aiRecommendation.recommendedService?.serviceCode || this.getServiceCode(shipmentData.Country);
+    let aiRecommendation;
+    try {
+      aiRecommendation = await aiService.getServiceRecommendation(rateOptions, shipmentData);
+      console.log("AI Recommendation:", aiRecommendation);
+    } catch (error) {
+      if (error.message === 'No cost-saving options found') {
+        console.log("No cost-saving options found, using standard service");
+        const countryCode = shipmentData.Receiver.Country;
+        const serviceCode = this.getServiceCode(countryCode);
+        aiRecommendation = {
+          recommendedService: rateOptions.find(opt => opt.serviceCode === serviceCode),
+          reason: 'Using standard service as no cost-saving options were available'
+        };
+      } else {
+        throw error;
+      }
+    }
+    // Use the recommended service code
+    const serviceCode = aiRecommendation.recommendedService.serviceCode;
     console.log(`Selected service: ${aiRecommendation.recommendedService?.serviceName} (${serviceCode})`);
     console.log(`Reason: ${aiRecommendation.reason}`);
 
