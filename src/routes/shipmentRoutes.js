@@ -116,20 +116,30 @@ router.post('/create_shipment', async (req, res) => {
 
     // Erstelle das Shipment über den ShipmentController
     const result = await ShipmentController.createShipment(shipmentData);
-
     res.json(result);
   } catch (error) {
-    console.error('Fehler beim Erstellen des Shipments:', error);
-    
-    // Extract UPS API error details if available
-    const errorMessage = error.message || 'Fehler beim Erstellen des Shipments.';
-    const statusCode = error.statusCode || 500;
-    const upsError = error.upsError || null;
-    
-    res.status(statusCode).json({ 
-      error: errorMessage,
-      details: upsError
+    console.error('Error creating shipment:', {
+      error: error.message,
+      stack: error.stack,
+      details: error.upsError
     });
+    
+    // Prepare error response in German
+    const errorResponse = {
+      error: error.translatedMessage || `Fehler: ${error.message}`,
+      details: {
+        validationErrors: error.validationErrors?.map(err => ({
+          code: err.code,
+          field: err.code === '120206' ? 'Receiver.State' : undefined,
+          message: err.message
+        }))
+      },
+      solution: error.validationErrors?.[0]?.code === '120206'
+        ? 'Bitte geben Sie einen gültigen Bundesland/Provinz-Code für die Lieferadresse an'
+        : 'Bitte überprüfen Sie die angegebenen Daten'
+    };
+    
+    res.status(error.statusCode || 500).json(errorResponse);
   }
 });
 
