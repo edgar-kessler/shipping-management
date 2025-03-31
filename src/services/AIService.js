@@ -428,9 +428,16 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
       });
 
       const data = await response.json();
-      if (!response.ok || !data.candidates?.[0]?.content?.parts?.[0]?.text?.includes('OK')) {
-        throw new Error('API test failed');
+      console.debug('API test response:', JSON.stringify(data, null, 2));
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
       }
+      
+      if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        throw new Error('API returned unexpected response format');
+      }
+      
       return true;
     } catch (error) {
       console.error('AI API test failed:', error);
