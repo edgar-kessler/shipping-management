@@ -160,9 +160,37 @@ class AIService {
    */
   async getAIRecommendation(costSavingOptions, standardService, shipmentData) {
     try {
+      // Validate API key format
+      if (!this.apiKey || !this.apiKey.startsWith('sk-or-v1-')) {
+        console.warn('Invalid or missing OpenRouter API key format');
+        throw new Error('AI service unavailable');
+      }
+
       // Prepare context for the AI
       const context = this.prepareContext(costSavingOptions, standardService, shipmentData);
       
+      const requestBody = {
+        model: this.model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a shipping logistics expert focused on cost savings. Your task is to recommend the most cost-effective UPS shipping service that does not compromise delivery time significantly. The goal is to save money while ensuring delivery is not delayed by more than 1 day compared to the standard service. Consider factors like cost, delivery time, reliability, and specific shipment requirements. Provide your recommendation with a brief explanation.'
+          },
+          {
+            role: 'user',
+            content: context
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 300
+      };
+
+      console.debug('Sending AI recommendation request:', {
+        model: this.model,
+        contextLength: context.length,
+        optionsCount: costSavingOptions.length
+      });
+
       // Make request to OpenRouter API
       const response = await fetch(this.apiUrl, {
         method: 'POST',
@@ -171,31 +199,25 @@ class AIService {
           'Authorization': `Bearer ${this.apiKey}`,
           'HTTP-Referer': 'https://shipping-management-app.com'
         },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a shipping logistics expert focused on cost savings. Your task is to recommend the most cost-effective UPS shipping service that does not compromise delivery time significantly. The goal is to save money while ensuring delivery is not delayed by more than 1 day compared to the standard service. Consider factors like cost, delivery time, reliability, and specific shipment requirements. Provide your recommendation with a brief explanation.'
-            },
-            {
-              role: 'user',
-              content: context
-            }
-          ],
-          temperature: 0.2, // Lower temperature for more consistent results
-          max_tokens: 300
-        })
+        body: JSON.stringify(requestBody)
       });
 
+      const responseText = await response.text();
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('OpenRouter API error:', errorText);
+        console.error('OpenRouter API error:', {
+          status: response.status,
+          response: responseText,
+          request: requestBody
+        });
         throw new Error(`AI service error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      console.log('OpenRouter API response:', JSON.stringify(data, null, 2));
+      const data = JSON.parse(responseText);
+      console.debug('OpenRouter API successful response:', {
+        model: data.model,
+        usage: data.usage,
+        responseLength: data.choices?.[0]?.message?.content?.length
+      });
       
       if (!data.choices || !data.choices[0] || !data.choices[0].message) {
         throw new Error('Invalid response format from OpenRouter API');

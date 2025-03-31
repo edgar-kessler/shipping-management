@@ -104,7 +104,22 @@ class DatabaseService {
       )
     `);
 
-    console.info('Tables "tokens", "documents", "shipments", "shipment_logs", "ratings", and "cost_savings" successfully created or already exist in MySQL');
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS shipment_summary (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        shipment_reference VARCHAR(50),
+        service_code VARCHAR(10),
+        service_name VARCHAR(50),
+        country_code VARCHAR(2),
+        cost DECIMAL(10,2),
+        currency VARCHAR(3),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX (shipment_reference),
+        INDEX (country_code)
+      )
+    `);
+
+    console.info('Tables "tokens", "documents", "shipments", "shipment_logs", "ratings", "cost_savings", and "shipment_summary" successfully created or already exist in MySQL');
   }
 
   // Use Luxon to get the current time in Berlin timezone in "HH:mm:ss dd-MM-yyyy" format
@@ -124,10 +139,11 @@ class DatabaseService {
 
     const dateCreated = this.getCurrentBerlinTime();
 
+    // Save to main shipments table
     const query = `
       INSERT INTO shipments (
         referenz, ship_to, service, document_record_id, status_code,
-        transaction_identifier, shipment_charges, tracking_nr, 
+        transaction_identifier, shipment_charges, tracking_nr,
         graphic_image, international_signature_graphic_image, benutzer, date_created
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
@@ -141,6 +157,30 @@ class DatabaseService {
     try {
       const db = await this.getDb();
       await db.query(query, params);
+
+      // Also save to summary table
+      const serviceData = JSON.parse(Service);
+      const chargesData = JSON.parse(ShipmentCharges);
+      const shipToData = JSON.parse(ShipTo);
+
+      await db.query(`
+        INSERT INTO shipment_summary (
+          shipment_reference,
+          service_code,
+          service_name,
+          country_code,
+          cost,
+          currency
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          Referenz,
+          serviceData.Code,
+          serviceData.Description,
+          shipToData.CountryCode,
+          parseFloat(chargesData.TotalCharges?.MonetaryValue || '0'),
+          chargesData.TotalCharges?.CurrencyCode || 'EUR'
+        ]
+      );
     } catch (error) {
       console.error('Error saving shipment:', error);
       throw error;
