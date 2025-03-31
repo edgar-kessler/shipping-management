@@ -89,7 +89,6 @@ class DatabaseService {
         standard_transit_days INT DEFAULT 0,
         standard_service_name VARCHAR(50),
         standard_service_cost DECIMAL(10,2),
-        standard_transit_days INT,
         selected_service_code VARCHAR(10),
         selected_service_name VARCHAR(50),
         selected_service_cost DECIMAL(10,2),
@@ -98,10 +97,11 @@ class DatabaseService {
         savings_amount DECIMAL(10,2),
         savings_percentage DECIMAL(5,2),
         currency VARCHAR(3),
-        shipment_reference VARCHAR(50),
+        shipment_reference VARCHAR(50) UNIQUE,
         ai_recommended TINYINT(1),
         timestamp TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
 

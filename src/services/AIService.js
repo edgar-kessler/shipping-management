@@ -182,7 +182,7 @@ class AIService {
           }
         ],
         temperature: 0.2,
-        max_tokens: 300
+        max_tokens: 10000
       };
 
       console.debug('Sending AI recommendation request:', {
@@ -204,6 +204,7 @@ class AIService {
         },
         body: JSON.stringify(requestBody)
       });
+      console.log('Response------------AI:', JSON.stringify(response));
 
       const responseText = await response.text();
       if (!response.ok) {
@@ -493,7 +494,7 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
             }
           ],
           temperature: 0.1, // Low temperature for accurate translations
-          max_tokens: 200
+          max_tokens: 2000
         })
       });
 
@@ -555,8 +556,8 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
       
       await db.execute(
         `INSERT INTO cost_savings (
-          country_code, 
-          standard_service_code, 
+          country_code,
+          standard_service_code,
           standard_service_name,
           standard_service_cost,
           standard_transit_days,
@@ -571,7 +572,23 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
           shipment_reference,
           ai_recommended,
           timestamp
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          country_code = VALUES(country_code),
+          standard_service_code = VALUES(standard_service_code),
+          standard_service_name = VALUES(standard_service_name),
+          standard_service_cost = VALUES(standard_service_cost),
+          standard_transit_days = VALUES(standard_transit_days),
+          selected_service_code = VALUES(selected_service_code),
+          selected_service_name = VALUES(selected_service_name),
+          selected_service_cost = VALUES(selected_service_cost),
+          selected_transit_days = VALUES(selected_transit_days),
+          transit_days_difference = VALUES(transit_days_difference),
+          savings_amount = VALUES(savings_amount),
+          savings_percentage = VALUES(savings_percentage),
+          currency = VALUES(currency),
+          ai_recommended = VALUES(ai_recommended),
+          timestamp = VALUES(timestamp)`,
         [
           logData.countryCode,
           logData.standardService.code,
