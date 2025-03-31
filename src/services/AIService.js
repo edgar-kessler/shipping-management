@@ -437,6 +437,55 @@ SAVINGS: [amount] [currency] ([percentage]%)`;
    * Log cost savings to the database for analysis
    * @param {Object} data - Cost savings data
    */
+  /**
+   * Translate and summarize an error message in German
+   * @param {Error|string} error - The error to translate
+   * @param {Object} [context] - Additional context about the error
+   * @returns {Promise<string>} - Translated and summarized error in German
+   */
+  async translateError(error, context = {}) {
+    try {
+      const errorMessage = typeof error === 'string' ? error : error.message;
+      const errorStack = typeof error === 'string' ? '' : error.stack;
+      
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+          'HTTP-Referer': 'https://shipping-management-app.com'
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: 'Du bist ein technischer Übersetzer. Übersetze die Fehlermeldung ins Deutsche und fasse sie kurz zusammen. Halte es technisch präzise aber verständlich. Format: "Zusammenfassung: [kurze Ursache] Lösung: [empfohlene Aktion]"'
+            },
+            {
+              role: 'user',
+              content: `Original error: ${errorMessage}\n\nStack: ${errorStack}\n\nContext: ${JSON.stringify(context)}`
+            }
+          ],
+          temperature: 0.1, // Low temperature for accurate translations
+          max_tokens: 200
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('OpenRouter API error:', errorText);
+        return `Fehlerübersetzung fehlgeschlagen. Original: ${errorMessage}`;
+      }
+
+      const data = await response.json();
+      return data.choices[0]?.message?.content || `Übersetzungsfehler. Original: ${errorMessage}`;
+    } catch (err) {
+      console.error('Error in translateError:', err);
+      return `Fehler bei der Übersetzung. Original: ${typeof error === 'string' ? error : error.message}`;
+    }
+  }
+
   async logCostSavings(data) {
     try {
       const db = await DatabaseService.getDb();
