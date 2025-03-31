@@ -2,6 +2,8 @@ import fetch from 'node-fetch';
 import OAuthService from '../services/OAuthService.js';
 import DatabaseService from '../services/DatabaseService.js';
 import UploadDocumentService from '../services/UploadDocumentService.js';
+import RatingService from '../services/RatingService.js';
+import AIService from '../services/AIService.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getStateCodeByStateName } from 'us-state-codes';
 
@@ -27,16 +29,36 @@ class ShipmentController {
     console.log("Fetched documentId:", documentId);
     console.log(shipmentData.State);
 
+    // Get rate options from UPS API
+    console.log("Getting rate options for shipment...");
+    const rateOptions = await RatingService.getRates(shipmentData);
+    
+    // Use AI to select the best service option
+    console.log("Using AI to select the best service option...");
+    const aiRecommendation = await AIService.getServiceRecommendation(rateOptions, shipmentData);
+    console.log("AI Recommendation:", aiRecommendation);    
+    // Use the recommended service code or fall back to default
+    const serviceCode = aiRecommendation.recommendedService?.serviceCode || this.getServiceCode(shipmentData.Country);
+    console.log(`Selected service: ${aiRecommendation.recommendedService?.serviceName} (${serviceCode})`);
+    console.log(`Reason: ${aiRecommendation.reason}`);
+
     const accessToken = await this.getAccessToken();
     const transId = uuidv4();
-    const serviceCode = this.getServiceCode(shipmentData.Country);
     const stateProvinceCode = this.getStateCode(Receiver);
     const requestBody = this.buildRequestBody(shipmentData, stateProvinceCode, serviceCode, documentId);
 
     this.debugLog("Shipment Request", { url: this.getShipmentUrl(), headers: this.getHeaders(transId, accessToken), body: requestBody });
 
     const response = await this.sendShipmentRequest(requestBody, transId, accessToken);
-    return this.handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId);
+    const result = await this.handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId);
+    
+    // Add AI recommendation to the result
+    result.serviceRecommendation = {
+      serviceName: aiRecommendation.recommendedService?.serviceName,
+      reason: aiRecommendation.reason
+    };
+    
+    return result;
   }
 
   async getAccessToken() {
@@ -79,7 +101,7 @@ class ShipmentController {
               BillShipper: { AccountNumber: process.env.SHIPPERNUMBER || 'G224H8' }
             }
           },
-          Service: { Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) },
+          Service: { Code: serviceCode, Description: this.getServiceDescription(serviceCode) },
           Package: {
             Description: 'Goalkeeper Goods',
             Packaging: { Code: '02', Description: 'Box' },
@@ -116,6 +138,7 @@ class ShipmentController {
       AttentionName: person.Name,
       ShipperNumber: shipperNumber,
       Phone: { Number: person.Phone || '0000' },
+      Email: { EmailAddress: person.Email },
       Address: {
         AddressLine: [person.AddressLine1, person.AddressLine2 || '', person.AddressLine3 || ''].filter(Boolean),
         City: person.City,
@@ -126,8 +149,30 @@ class ShipmentController {
     };
   }
 
-  getServiceDescription(country) {
-    return country === 'DE' || country === 'NL' || country === 'BE' ? 'UPS Standard' : 'UPS Saver';
+  getServiceDescription(serviceCode) {
+    const serviceDescriptions = {
+      '01': 'UPS Next Day Air',
+      '02': 'UPS 2nd Day Air',
+      '03': 'UPS Ground',
+      '07': 'UPS Express',
+      '08': 'UPS Expedited',
+      '11': 'UPS Standard',
+      '12': 'UPS 3 Day Select',
+      '13': 'UPS Next Day Air Saver',
+      '14': 'UPS Next Day Air Early',
+      '54': 'UPS Express Plus',
+      '59': 'UPS 2nd Day Air A.M.',
+      '65': 'UPS Express Saver',
+      '82': 'UPS Today Standard',
+      '83': 'UPS Today Dedicated Courier',
+      '84': 'UPS Today Intercity',
+      '85': 'UPS Today Express',
+      '86': 'UPS Today Express Saver',
+      '96': 'UPS Worldwide Express Freight'
+    };
+    
+    return serviceDescriptions[serviceCode] || 
+           (serviceCode === 'DE' || serviceCode === 'NL' || serviceCode === 'BE' ? 'UPS Standard' : 'UPS Saver');
   }
 
   getShipmentUrl() {
@@ -138,65 +183,103 @@ class ShipmentController {
     return {
       'Content-Type': 'application/json',
       'transId': transId,
-      'transactionSrc': 'testing',
+      'transactionSrc': 'prod',
       'Authorization': `Bearer ${accessToken}`
     };
   }
 
   async sendShipmentRequest(requestBody, transId, accessToken) {
-    const response = await fetch(this.getShipmentUrl(), {
-      method: 'POST',
-      headers: this.getHeaders(transId, accessToken),
-      body: JSON.stringify(requestBody)
-    });
-    const data = await response.json();
-    this.debugLog("Shipment Response", { status: response.status, data });
-    if (!response.ok) {
-      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
+    try {
+      const url = this.getShipmentUrl();
+      const headers = this.getHeaders(transId, accessToken);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let upsError = null;
+        
+        try {
+          // Try to parse the error response as JSON
+          upsError = JSON.parse(errorText);
+        } catch (e) {
+          // If not valid JSON, use the raw text
+          upsError = { rawError: errorText };
+        }
+        
+        // Create a custom error object with UPS error details
+        const error = new Error(`UPS API Error: ${response.status} ${response.statusText}`);
+        error.statusCode = response.status;
+        error.upsError = upsError;
+        
+        // Log the error for debugging
+        console.error('UPS Shipment API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          details: upsError
+        });
+        
+        throw error;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error sending shipment request:', error);
+      throw error;
     }
-    return { data, statusCode: response.status };
   }
 
   async handleShipmentResponse(response, shipmentData, transId, serviceCode, documentRecordId) {
-    const { data, statusCode } = response;
+    try {
+      // Log the shipment response
+      this.debugLog("Shipment Response", response);
+      
+      // Extract response data
+      const data = response;
+      
+      // Create a log entry
+      await DatabaseService.saveShipmentLog({
+        orderNr: shipmentData.OrderNr,
+        statusCode: 200,
+        message: `Shipment created successfully. Tracking number: ${data.ShipmentResponse?.ShipmentResults?.ShipmentIdentificationNumber || 'N/A'}`
+      });
 
-    if (!data.ShipmentResponse?.Response?.ResponseStatus?.Code === '1') {
-      // Throw an error with the full UPS response for debugging
-      throw new Error(`UPS API Fehler: ${JSON.stringify(data)}`);
+      // Format the response data
+      const formattedResponse = {
+        ID: transId,
+        Referenz: shipmentData.OrderNr,
+        ShipTo: JSON.stringify(shipmentData.Receiver),
+        Service: JSON.stringify({ ServiceCode: serviceCode }),
+        Document_record_id: documentRecordId,
+        StatusCode: 200,
+        TransactionIdentifier: transId,
+        ShipmentCharges: JSON.stringify(data.ShipmentResponse?.ShipmentResults?.ShipmentCharges || {}),
+        TrackingNr: data.ShipmentResponse?.ShipmentResults?.ShipmentIdentificationNumber || '',
+        GraphicImage: data.ShipmentResponse?.ShipmentResults?.PackageResults?.[0]?.ShippingLabel?.GraphicImage || '',
+        InternationalSignatureGraphicImage: data.ShipmentResponse?.ShipmentResults?.Form?.GraphicImage || '',
+        Benutzer: 'System'
+      };
+
+      // Save the shipment to the database
+      await DatabaseService.saveShipment(formattedResponse);
+
+      return formattedResponse;
+    } catch (error) {
+      console.error('Error handling shipment response:', error);
+      
+      // Log the error
+      await DatabaseService.saveShipmentLog({
+        orderNr: shipmentData.OrderNr,
+        statusCode: error.statusCode || 500,
+        message: `Error creating shipment: ${error.message}`
+      });
+      
+      throw error;
     }
-
-    const shipmentResults = data.ShipmentResponse?.ShipmentResults;
-    const trackingNumber = shipmentResults?.ShipmentIdentificationNumber;
-    const packageResults = shipmentResults?.PackageResults;
-    const zplBase64 = packageResults?.ShippingLabel?.GraphicImage;
-    const internationalSignatureGraphicImage = packageResults?.ShippingLabel?.InternationalSignatureGraphicImage;
-    const shipmentCharges = JSON.stringify(shipmentResults?.NegotiatedRateCharges);
-
-    if (!zplBase64 || !trackingNumber) {
-      throw new Error('Fehler beim Erstellen des Shipments: Label oder Tracking-Nummer fehlt.');
-    }
-
-    await DatabaseService.saveShipment({
-      ID: uuidv4(),
-      Referenz: shipmentData.OrderNr,
-      ShipTo: JSON.stringify(shipmentData.Receiver),
-      Service: JSON.stringify({ Code: serviceCode, Description: this.getServiceDescription(shipmentData.Country) }),
-      Document_record_id: documentRecordId,
-      StatusCode: statusCode,
-      TransactionIdentifier: transId,
-      ShipmentCharges: shipmentCharges,
-      TrackingNr: trackingNumber,
-      GraphicImage: zplBase64,
-      InternationalSignatureGraphicImage: internationalSignatureGraphicImage,
-      Benutzer: 'Test-User'
-    });
-
-    return {
-      ZPLBase64: zplBase64,
-      TrackingNumber: trackingNumber,
-      DeliveryNoteNr: shipmentData.DeliveryNoteNr,
-      Service: this.getServiceDescription(shipmentData.Country)
-    };
   }
 
   debugLog(title, details) {

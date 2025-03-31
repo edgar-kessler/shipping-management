@@ -1,8 +1,67 @@
 import express from 'express';
 import ShipmentController from '../controllers/shipmentController.js';
+import RatingService from '../services/RatingService.js';
+import AIService from '../services/AIService.js';
+import DatabaseService from '../services/DatabaseService.js';
 import UploadDocumentService from '../services/UploadDocumentService.js';
 
 const router = express.Router();
+
+// Get cost savings summary
+router.get('/cost_savings_summary', async (req, res) => {
+  try {
+    const summary = await DatabaseService.getCostSavingsSummary();
+    res.json(summary);
+  } catch (error) {
+    console.error('Error getting cost savings summary:', error);
+    res.status(500).json({ error: 'Error retrieving cost savings summary.' });
+  }
+});
+
+// Get rate estimates for a shipment
+router.post('/get_rates', async (req, res) => {
+  const { Receiver, Sender } = req.body;
+
+  // Check for required fields
+  if (!Receiver || !Sender) {
+    return res.status(400).json({ error: 'Receiver and Sender information is required.' });
+  }
+
+  try {
+    // Get rate options from UPS API
+    const rateOptions = await RatingService.getRates(req.body);
+    
+    // Use AI to recommend the best service option
+    const aiRecommendation = await AIService.getServiceRecommendation(rateOptions, req.body);
+    
+    res.json({
+      rates: rateOptions,
+      recommendation: {
+        service: aiRecommendation.recommendedService,
+        reason: aiRecommendation.reason,
+        costSaving: aiRecommendation.costSaving,
+        standardService: aiRecommendation.standardService,
+        transitDays: {
+          standard: aiRecommendation.standardService?.transitDays || 'Unknown',
+          recommended: aiRecommendation.recommendedService?.transitDays || 'Unknown',
+          difference: parseInt(aiRecommendation.recommendedService?.transitDays || 0) - 
+                      parseInt(aiRecommendation.standardService?.transitDays || 0)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error getting rates:', error);
+    // Extract UPS API error details if available
+    const errorMessage = error.message || 'Error getting rate estimates.';
+    const statusCode = error.statusCode || 500;
+    const upsError = error.upsError || null;
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: upsError
+    });
+  }
+});
 
 router.post('/create_shipment', async (req, res) => {
   const {
@@ -61,7 +120,16 @@ router.post('/create_shipment', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Fehler beim Erstellen des Shipments:', error);
-    res.status(500).json({ error: 'Fehler beim Erstellen des Shipments.' });
+    
+    // Extract UPS API error details if available
+    const errorMessage = error.message || 'Fehler beim Erstellen des Shipments.';
+    const statusCode = error.statusCode || 500;
+    const upsError = error.upsError || null;
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: upsError
+    });
   }
 });
 
