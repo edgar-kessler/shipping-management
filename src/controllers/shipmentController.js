@@ -308,7 +308,14 @@ class ShipmentController {
         Document_record_id: documentRecordId,
         StatusCode: statusCode,
         TransactionIdentifier: transId,
-        ShipmentCharges: JSON.stringify(shipmentResults.NegotiatedRateCharges),
+        ShipmentCharges: JSON.stringify({
+          TotalCharges: {
+            CurrencyCode: 'EUR',
+            MonetaryValue: '0',
+            ...(shipmentResults.NegotiatedRateCharges?.TotalCharges || {})
+          },
+          ...(shipmentResults.NegotiatedRateCharges || {})
+        }),
         TrackingNr: trackingNumber,
         GraphicImage: zplBase64,
         InternationalSignatureGraphicImage: packageResults?.ShippingLabel?.InternationalSignatureGraphicImage,
