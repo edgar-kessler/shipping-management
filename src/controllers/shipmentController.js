@@ -4,7 +4,7 @@ import DatabaseService from '../services/DatabaseService.js';
 import UploadDocumentService from '../services/UploadDocumentService.js';
 import RatingService from '../services/RatingService.js';
 import AIService from '../services/AIService.js';
-const aiService = new AIService();
+const aiService = new AIService(); // Create single instance
 import { v4 as uuidv4 } from 'uuid';
 import { getStateCodeByStateName } from 'us-state-codes';
 
