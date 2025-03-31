@@ -34,7 +34,8 @@ async function main() {
         if (savings.overall) {
             console.log('Total savings across all shipments:');
             console.log(`- Amount: ${savings.overall[0].total_savings} ${savings.overall[0].currency}`);
-            console.log(`- Percentage: ${savings.overall[0].avg_savings_percentage.toFixed(2)}%`);
+            const avgPercentage = savings.overall[0].avg_savings_percentage;
+            console.log(`- Percentage: ${avgPercentage ? avgPercentage.toFixed(2) : '0.00'}%`);
         }
     } catch (error) {
         console.error('Startup error:', error);
