@@ -153,6 +153,12 @@ class ShipmentController {
             PackageWeight: { UnitOfMeasurement: { Code: 'KGS', Description: 'Kilograms' }, Weight: '1' }
           },
           ShipmentServiceOptions: {
+            Notification: {
+              NotificationCode: '6',
+              EMail: {
+                EMailAddress: Receiver.Email
+              }
+            },
             InternationalForms: {
               FormType: ['07'],
               UserCreatedForm: [{ DocumentID: [documentId] }]
