@@ -153,12 +153,50 @@ class ShipmentController {
             PackageWeight: { UnitOfMeasurement: { Code: 'KGS', Description: 'Kilograms' }, Weight: '1' }
           },
           ShipmentServiceOptions: {
-            Notification: {
-              NotificationCode: '6',
-              EMail: {
-                EMailAddress: Receiver.Email
+            Notification: [
+              {
+                NotificationCode: '5',
+                EMail: {
+                  EMailAddress: Receiver.Email
+                }
+              },
+              {
+                NotificationCode: '6',
+                EMail: {
+                  EMailAddress: Receiver.Email
+                }
+              },
+              {
+                NotificationCode: '7',
+                EMail: {
+                  EMailAddress: Receiver.Email
+                }
+              },
+              {
+                NotificationCode: '8',
+                EMail: {
+                  EMailAddress: Receiver.Email
+                }
+              },
+              {
+                NotificationCode: '2',
+                EMail: {
+                  EMailAddress: Receiver.Email
+                }
+              },
+              {
+                NotificationCode: '012',
+                EMail: {
+                  EMailAddress: Receiver.Email
+                }
+              },
+              {
+                NotificationCode: '013',
+                EMail: {
+                  EMailAddress: 'edgar.kessler@prokeepersline.com'
+                }
               }
-            },
+            ],
             InternationalForms: {
               FormType: ['07'],
               UserCreatedForm: [{ DocumentID: [documentId] }]
