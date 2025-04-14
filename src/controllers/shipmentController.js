@@ -158,42 +158,70 @@ class ShipmentController {
                 NotificationCode: '5',
                 EMail: {
                   EMailAddress: Receiver.Email
+                },
+                Locale: {
+                  Language: 'ENG',
+                  Dialect: 'US'
                 }
               },
               {
                 NotificationCode: '6',
                 EMail: {
                   EMailAddress: Receiver.Email
+                },
+                Locale: {
+                  Language: 'ENG',
+                  Dialect: 'US'
                 }
               },
               {
                 NotificationCode: '7',
                 EMail: {
                   EMailAddress: Receiver.Email
+                },
+                Locale: {
+                  Language: 'ENG',
+                  Dialect: 'US'
                 }
               },
               {
                 NotificationCode: '8',
                 EMail: {
                   EMailAddress: Receiver.Email
+                },
+                Locale: {
+                  Language: 'ENG',
+                  Dialect: 'US'
                 }
               },
               {
                 NotificationCode: '2',
                 EMail: {
                   EMailAddress: Receiver.Email
+                },
+                Locale: {
+                  Language: 'ENG',
+                  Dialect: 'US'
                 }
               },
               {
                 NotificationCode: '012',
                 EMail: {
                   EMailAddress: Receiver.Email
+                },
+                Locale: {
+                  Language: 'ENG',
+                  Dialect: 'US'
                 }
               },
               {
                 NotificationCode: '013',
                 EMail: {
                   EMailAddress: 'edgar.kessler@prokeepersline.com'
+                },
+                Locale: {
+                  Language: 'ENG',
+                  Dialect: 'US'
                 }
               }
             ],
