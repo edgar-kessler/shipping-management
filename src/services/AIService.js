@@ -6,7 +6,7 @@ import DatabaseService from './DatabaseService.js';
 export default class AIService {
   constructor() {
     this.apiKey = process.env.GEMINI_API_KEY;
-    this.modelName = 'gemini-2.0-flash'; // Default model
+    this.modelName = 'gemini-2.5-flash-preview-04-17'; // Default model
     
     if (!this.apiKey) {
       throw new Error('Gemini API key not configured in .env');
@@ -517,4 +517,3 @@ Context: ${JSON.stringify(context)}`;
     }
   }
 }
-
