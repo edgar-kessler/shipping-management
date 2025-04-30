@@ -3,6 +3,7 @@
 import fetch from 'node-fetch';
 import OAuthService from './OAuthService.js';
 import DatabaseService from './DatabaseService.js';
+import { getStateCodeByStateName } from 'us-state-codes';
 
 class RatingService {
   constructor() {
@@ -286,7 +287,22 @@ class RatingService {
     
     // Add state/province code if available
     if (person.State) {
-      address.Address.StateProvinceCode = person.State;
+      if (countryCode === 'US') {
+        try {
+          const stateCode = getStateCodeByStateName(person.State);
+          if (stateCode) {
+            address.Address.StateProvinceCode = stateCode;
+          } else {
+            console.warn(`Unknown or invalid US state: ${person.State}`);
+            address.Address.StateProvinceCode = '';
+          }
+        } catch (error) {
+          console.error(`State code conversion error: ${error.message}`);
+          address.Address.StateProvinceCode = '';
+        }
+      } else {
+        address.Address.StateProvinceCode = person.State;
+      }
     }
     
     return address;
