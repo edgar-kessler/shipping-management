@@ -90,35 +90,29 @@ class ShipmentController {
   }
 
   getStateCode(receiver) {
-    // Remove state/province for Germany and UK
+    // Für DE und GB kein State/Province-Code
     if (receiver.Country === 'DE' || receiver.Country === 'GB') {
       return '';
     }
 
-    // Handle US states
+    // Für die USA: Immer State in 2-Buchstaben-Code übersetzen
     if (receiver.Country === 'US' && receiver.State) {
       try {
-        // If already a 2-letter code, validate it exists
-        if (receiver.State.length === 2) {
-          const stateName = getStateCodeByStateName(receiver.State);
-          if (stateName) {
-            return receiver.State.toUpperCase(); // Return validated code
-          }
-        }
-        
-        // Convert full state name to code
+        // Versuche immer, den State (egal ob Name oder Code) zu konvertieren
         const stateCode = getStateCodeByStateName(receiver.State);
         if (stateCode) {
-          console.log(`Converted ${receiver.State} to ${stateCode}`);
           return stateCode;
+        } else {
+          console.warn(`Unknown US state: ${receiver.State}`);
+          return '';
         }
-        
-        console.warn(`Unknown US state: ${receiver.State}`);
       } catch (error) {
         console.error(`State code conversion error: ${error.message}`);
+        return '';
       }
     }
-    
+
+    // Für andere Länder ggf. State/Province zurückgeben
     return receiver.State || '';
   }
 
